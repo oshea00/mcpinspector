@@ -26,7 +26,8 @@ pub struct JsonRpcRequest {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JsonRpcResponse {
     pub jsonrpc: String,
-    pub id: String,
+    /// May be a string or integer depending on the server implementation.
+    pub id: Value,
     pub result: Option<Value>,
     pub error: Option<JsonRpcError>,
 }

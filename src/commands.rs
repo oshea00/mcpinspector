@@ -69,10 +69,10 @@ async fn cmd_connect(state: &mut ReplState, args: &[String]) -> Result<()> {
 
     display::print_info(&format!("Connecting to '{command}'..."));
 
-    let (mut transport, channels) = StdioTransport::spawn(&command, &cmd_args, &env)?;
+    let (mut transport, channels) = StdioTransport::spawn(&command, &cmd_args, &env, state.debug)?;
 
     let (notif_tx, notif_rx) = mpsc::channel::<Notification>(256);
-    let client = McpClient::new(channels.tx, channels.rx, notif_tx, state.timeout_secs, state.client_capabilities.clone());
+    let client = McpClient::new(channels.tx, channels.rx, notif_tx, state.timeout_secs, state.client_capabilities.clone(), state.debug);
 
     match client.initialize().await {
         Ok(caps) => {
@@ -97,6 +97,7 @@ async fn cmd_connect(state: &mut ReplState, args: &[String]) -> Result<()> {
             state.config.command = command;
             state.config.args = cmd_args;
             state.client = Some(client);
+            state.stdio_transport = Some(transport);
             state.notification_rx = Some(notif_rx);
 
             display::print_success("Connected!");
@@ -134,7 +135,7 @@ async fn cmd_connect_http(state: &mut ReplState, args: &[String]) -> Result<()> 
 
     let channels = HttpTransport::connect(url.clone())?;
     let (notif_tx, notif_rx) = mpsc::channel::<Notification>(256);
-    let client = McpClient::new(channels.tx, channels.rx, notif_tx, state.timeout_secs, state.client_capabilities.clone());
+    let client = McpClient::new(channels.tx, channels.rx, notif_tx, state.timeout_secs, state.client_capabilities.clone(), state.debug);
 
     match client.initialize().await {
         Ok(caps) => {
@@ -163,6 +164,9 @@ async fn cmd_disconnect(state: &mut ReplState) -> Result<()> {
     state.client = None;
     state.notification_rx = None;
     state.capabilities = None;
+    if let Some(mut t) = state.stdio_transport.take() {
+        t.kill().await;
+    }
     {
         let mut t = state.completer_state.tools.lock().await;
         t.clear();

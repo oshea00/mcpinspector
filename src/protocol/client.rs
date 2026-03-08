@@ -23,6 +23,8 @@ pub struct McpClient {
     /// Map of server-request method → fixed JSON response payload.
     /// Shared with the reader task so it can be updated at runtime via cap-set/cap-remove.
     pub client_capabilities: Arc<Mutex<HashMap<String, Value>>>,
+    #[allow(dead_code)]
+    pub debug: bool,
 }
 
 impl McpClient {
@@ -32,6 +34,7 @@ impl McpClient {
         notification_tx: mpsc::Sender<Notification>,
         timeout_secs: u64,
         client_capabilities: Arc<Mutex<HashMap<String, Value>>>,
+        debug: bool,
     ) -> Self {
         let pending: Arc<Mutex<HashMap<String, oneshot::Sender<JsonRpcResponse>>>> =
             Arc::new(Mutex::new(HashMap::new()));
@@ -46,6 +49,9 @@ impl McpClient {
 
         let _writer_task = tokio::spawn(async move {
             while let Some(msg) = writer_rx.recv().await {
+                if debug {
+                    eprintln!("[mcpi → server] {msg}");
+                }
                 if transport_tx_clone.send(msg).await.is_err() {
                     break;
                 }
@@ -65,6 +71,9 @@ impl McpClient {
                 if trimmed.is_empty() {
                     continue;
                 }
+                if debug {
+                    eprintln!("[server → mcpi] {trimmed}");
+                }
 
                 if let Ok(val) = serde_json::from_str::<Value>(trimmed) {
                     let has_id     = val.get("id").is_some();
@@ -75,8 +84,13 @@ impl McpClient {
                     if has_id && (has_result || has_error) {
                         // Client-bound response to one of our requests
                         if let Ok(resp) = serde_json::from_value::<JsonRpcResponse>(val) {
+                            // Normalize id to string — servers may echo back a number or string
+                            let id_key = match &resp.id {
+                                serde_json::Value::String(s) => s.clone(),
+                                v => v.to_string(),
+                            };
                             let mut map = pending_clone.lock().await;
-                            if let Some(tx) = map.remove(&resp.id) {
+                            if let Some(tx) = map.remove(&id_key) {
                                 let _ = tx.send(resp);
                             }
                         }
@@ -141,6 +155,7 @@ impl McpClient {
             _writer_task,
             timeout_secs,
             client_capabilities,
+            debug,
         }
     }
 

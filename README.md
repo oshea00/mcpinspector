@@ -12,6 +12,7 @@ An interactive command-line tool for connecting to and inspecting [Model Context
 - Export **Claude Desktop-compatible JSON** configuration
 - **Configurable request timeout** via CLI flag or REPL command
 - **Fast failure** on bad connections — shows server stderr and exits immediately when the process dies
+- **Debug mode** (`--debug`) — prints raw JSON-RPC wire traffic and live server stderr to your terminal
 
 ## Installation
 
@@ -42,6 +43,8 @@ mcpi [OPTIONS]
 | `--connect-http <URL>` | Connect to an HTTP MCP server on startup |
 | `--live` | Print server notifications immediately instead of buffering them |
 | `--timeout <SECS>` | Request timeout in seconds (default: 10) |
+| `-e <KEY=VALUE>` | Pass an environment variable to the server process (repeatable) |
+| `--debug` | Print raw JSON-RPC messages and live server stderr to stderr |
 | `-h, --help` | Print help |
 | `-V, --version` | Print version |
 
@@ -62,6 +65,12 @@ mcpi --live --connect "npx -y @modelcontextprotocol/server-filesystem /tmp"
 
 # Set a custom request timeout (default is 10s)
 mcpi --timeout 30 --connect "npx -y @modelcontextprotocol/server-filesystem /tmp"
+
+# Pass environment variables to the server process
+mcpi -e API_KEY=sk-abc123 -e REGION=us-east-1 --connect "my-mcp-server --mcp"
+
+# Show raw JSON-RPC wire traffic and live server stderr
+mcpi --debug --connect "my-mcp-server --mcp"
 ```
 
 ---
@@ -432,6 +441,27 @@ Config written to claude_config.json
 
 mcpi> quit
 ```
+
+---
+
+## Debugging
+
+Use `--debug` to see every raw JSON-RPC message exchanged between `mcpi` and the server, plus live server stderr output. This is useful for diagnosing handshake issues, unexpected server exits, or protocol mismatches.
+
+```
+$ mcpi --debug -e DROPBOX_ACCESS_TOKEN=$TOKEN --connect "dropboxmcp --mcp"
+ℹ Connecting to 'dropboxmcp'...
+[mcpi → server] {"jsonrpc":"2.0","id":"b649c034","method":"initialize","params":{...}}
+[server stderr] 2026-03-08T22:59:34Z  INFO dropboxmcp: Starting server
+[server → mcpi] {"jsonrpc":"2.0","id":"b649c034","result":{"protocolVersion":"2024-11-05",...}}
+[mcpi → server] {"jsonrpc":"2.0","method":"notifications/initialized"}
+[mcpi → server] {"jsonrpc":"2.0","id":"1697f5a1","method":"tools/list"}
+[server stderr] 2026-03-08T22:59:34Z DEBUG serve_inner: received request id=1697f5a1
+[server → mcpi] {"jsonrpc":"2.0","id":"1697f5a1","result":{"tools":[...]}}
+✓ Connected!
+```
+
+All debug output goes to **stderr**, so it does not interfere with any stdout pipelines.
 
 ---
 

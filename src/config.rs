@@ -7,6 +7,7 @@ use tokio::sync::{mpsc, Mutex};
 
 use crate::protocol::{Notification, ServerCapabilities};
 use crate::protocol::client::McpClient;
+use crate::transport::stdio::StdioTransport;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TransportType {
@@ -55,6 +56,7 @@ pub const DEFAULT_TIMEOUT_SECS: u64 = 10;
 
 pub struct ReplState {
     pub client: Option<McpClient>,
+    pub stdio_transport: Option<StdioTransport>,
     pub config: ConnectionConfig,
     pub server_name: String,
     pub capabilities: Option<ServerCapabilities>,
@@ -63,6 +65,7 @@ pub struct ReplState {
     pub completer_state: Arc<CompleterState>,
     pub history: Vec<String>,
     pub timeout_secs: u64,
+    pub debug: bool,
     /// Configured client capability handlers: method → fixed JSON response.
     /// Shared with McpClient so the reader task can respond to server requests at runtime.
     pub client_capabilities: Arc<Mutex<HashMap<String, Value>>>,
@@ -72,6 +75,7 @@ impl ReplState {
     pub fn new(completer_state: Arc<CompleterState>) -> Self {
         ReplState {
             client: None,
+            stdio_transport: None,
             config: ConnectionConfig::default(),
             server_name: "mcp-server".to_string(),
             capabilities: None,
@@ -80,6 +84,7 @@ impl ReplState {
             completer_state,
             history: Vec::new(),
             timeout_secs: DEFAULT_TIMEOUT_SECS,
+            debug: false,
             client_capabilities: Arc::new(Mutex::new(HashMap::new())),
         }
     }

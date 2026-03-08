@@ -33,6 +33,14 @@ struct Cli {
     /// Request timeout in seconds (default: 10)
     #[arg(long, value_name = "SECS", default_value_t = DEFAULT_TIMEOUT_SECS)]
     timeout: u64,
+
+    /// Environment variable to pass to the MCP server (KEY=VALUE, repeatable)
+    #[arg(short = 'e', value_name = "KEY=VALUE", action = clap::ArgAction::Append)]
+    env: Vec<String>,
+
+    /// Print raw protocol messages to stderr for debugging
+    #[arg(long)]
+    debug: bool,
 }
 
 #[tokio::main]
@@ -42,6 +50,16 @@ async fn main() -> Result<()> {
     let completer_state = CompleterState::new();
     let mut state = ReplState::new(completer_state);
     state.timeout_secs = cli.timeout;
+    state.debug = cli.debug;
+
+    // Populate env vars from -e KEY=VALUE flags
+    for kv in &cli.env {
+        if let Some((k, v)) = kv.split_once('=') {
+            state.config.env.insert(k.to_string(), v.to_string());
+        } else {
+            eprintln!("Warning: ignoring malformed -e value (expected KEY=VALUE): {kv}");
+        }
+    }
 
     // Auto-connect if flags provided
     if let Some(cmd_str) = &cli.connect {

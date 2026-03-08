@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::codec::{FramedRead, LinesCodec};
@@ -20,6 +20,7 @@ impl StdioTransport {
         command: &str,
         args: &[String],
         env: &HashMap<String, String>,
+        debug: bool,
     ) -> Result<(Self, TransportChannels)> {
         let mut cmd = Command::new(command);
         cmd.args(args)
@@ -36,13 +37,21 @@ impl StdioTransport {
         let stdout = child.stdout.take().expect("stdout should be piped");
         let stderr = child.stderr.take().expect("stderr should be piped");
 
-        // Collect stderr into a shared buffer so callers can inspect it on failure
+        // Collect stderr into a shared buffer so callers can inspect it on failure.
+        // In debug mode, also stream each line to our own stderr in real time.
         let stderr_buf: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
         let stderr_buf_writer = stderr_buf.clone();
         tokio::spawn(async move {
+            let reader = BufReader::new(stderr);
+            let mut lines = reader.lines();
             let mut buf = String::new();
-            let mut stderr = stderr;
-            let _ = stderr.read_to_string(&mut buf).await;
+            while let Ok(Some(line)) = lines.next_line().await {
+                if debug {
+                    eprintln!("[server stderr] {line}");
+                }
+                buf.push_str(&line);
+                buf.push('\n');
+            }
             *stderr_buf_writer.lock().await = buf;
         });
 
