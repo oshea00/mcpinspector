@@ -29,6 +29,12 @@ cargo build --release
 ./target/release/mcpi
 ```
 
+Or install via cargo
+
+```bash
+cargo install mcpi
+```
+
 ## Usage
 
 ```
