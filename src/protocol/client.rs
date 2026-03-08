@@ -8,7 +8,7 @@ use tokio::time::{timeout, Duration};
 use uuid::Uuid;
 
 use crate::protocol::{
-    JsonRpcRequest, JsonRpcResponse, JsonRpcNotification, Notification,
+    JsonRpcRequest, JsonRpcResponse, JsonRpcNotification, JsonRpcServerRequest, Notification,
     McpTool, McpResource, McpPrompt, McpPromptMessage, ServerCapabilities,
 };
 
@@ -20,6 +20,9 @@ pub struct McpClient {
     pub _reader_task: JoinHandle<()>,
     pub _writer_task: JoinHandle<()>,
     pub timeout_secs: u64,
+    /// Map of server-request method → fixed JSON response payload.
+    /// Shared with the reader task so it can be updated at runtime via cap-set/cap-remove.
+    pub client_capabilities: Arc<Mutex<HashMap<String, Value>>>,
 }
 
 impl McpClient {
@@ -28,12 +31,14 @@ impl McpClient {
         transport_rx: mpsc::Receiver<String>,
         notification_tx: mpsc::Sender<Notification>,
         timeout_secs: u64,
+        client_capabilities: Arc<Mutex<HashMap<String, Value>>>,
     ) -> Self {
         let pending: Arc<Mutex<HashMap<String, oneshot::Sender<JsonRpcResponse>>>> =
             Arc::new(Mutex::new(HashMap::new()));
 
         let pending_clone = pending.clone();
         let notif_tx_clone = notification_tx.clone();
+        let caps_clone = client_capabilities.clone();
 
         // Writer task: read from our channel and forward to transport
         let (writer_tx, mut writer_rx) = mpsc::channel::<String>(64);
@@ -47,35 +52,83 @@ impl McpClient {
             }
         });
 
-        // Reader task: parse incoming lines, route to pending or notification.
+        // Clone writer_tx so the reader task can send responses back to the server.
+        let response_tx = writer_tx.clone();
+
+        // Reader task: parse incoming lines, route to pending responses, notifications,
+        // or server-initiated requests.
         // When stdout closes (process exited), drain pending map so callers fail fast.
         let _reader_task = tokio::spawn(async move {
-            let mut transport_rx = transport_rx;  // needs mut inside async block
+            let mut transport_rx = transport_rx;
             while let Some(line) = transport_rx.recv().await {
                 let trimmed = line.trim();
                 if trimmed.is_empty() {
                     continue;
                 }
 
-                // Try as response (has id field at root)
                 if let Ok(val) = serde_json::from_str::<Value>(trimmed) {
-                    if val.get("id").is_some() && (val.get("result").is_some() || val.get("error").is_some()) {
+                    let has_id     = val.get("id").is_some();
+                    let has_method = val.get("method").is_some();
+                    let has_result = val.get("result").is_some();
+                    let has_error  = val.get("error").is_some();
+
+                    if has_id && (has_result || has_error) {
+                        // Client-bound response to one of our requests
                         if let Ok(resp) = serde_json::from_value::<JsonRpcResponse>(val) {
                             let mut map = pending_clone.lock().await;
                             if let Some(tx) = map.remove(&resp.id) {
                                 let _ = tx.send(resp);
                             }
                         }
-                    } else if val.get("method").is_some() && val.get("id").is_none() {
+                    } else if has_method && !has_id {
+                        // Server notification (no id)
                         if let Ok(notif) = serde_json::from_value::<JsonRpcNotification>(val) {
                             let n = Notification::from_jsonrpc(&notif);
                             let _ = notif_tx_clone.send(n).await;
                         }
+                    } else if has_method && has_id {
+                        // Server-initiated request — look up a configured handler
+                        if let Ok(req) = serde_json::from_value::<JsonRpcServerRequest>(val) {
+                            let handlers = caps_clone.lock().await;
+                            let responded = if let Some(payload) = handlers.get(&req.method) {
+                                let reply = json!({
+                                    "jsonrpc": "2.0",
+                                    "id": req.id,
+                                    "result": payload
+                                });
+                                if let Ok(msg) = serde_json::to_string(&reply) {
+                                    response_tx.send(msg).await.is_ok()
+                                } else {
+                                    false
+                                }
+                            } else {
+                                // No handler — reply with method-not-found so the server
+                                // doesn't time out silently.
+                                let reply = json!({
+                                    "jsonrpc": "2.0",
+                                    "id": req.id,
+                                    "error": {
+                                        "code": -32601,
+                                        "message": "Method not found"
+                                    }
+                                });
+                                if let Ok(msg) = serde_json::to_string(&reply) {
+                                    response_tx.send(msg).await.is_ok()
+                                } else {
+                                    false
+                                }
+                            };
+                            drop(handlers);
+                            let _ = notif_tx_clone.send(Notification::ServerRequest {
+                                method: req.method,
+                                params: req.params,
+                                responded,
+                            }).await;
+                        }
                     }
                 }
             }
-            // stdout closed — process likely exited. Drop all pending senders so
-            // awaiting send_request calls get RecvError immediately instead of timing out.
+            // stdout closed — drop all pending senders so callers fail fast.
             let mut map = pending_clone.lock().await;
             map.clear();
         });
@@ -87,6 +140,7 @@ impl McpClient {
             _reader_task,
             _writer_task,
             timeout_secs,
+            client_capabilities,
         }
     }
 
@@ -121,11 +175,21 @@ impl McpClient {
     }
 
     pub async fn initialize(&self) -> Result<ServerCapabilities> {
+        // Derive the advertised client capabilities from registered handlers.
+        // e.g. "roots/list" → advertise { "roots": {} }
+        let mut client_caps = serde_json::Map::new();
+        {
+            let handlers = self.client_capabilities.lock().await;
+            for method in handlers.keys() {
+                if let Some(ns) = method.split('/').next() {
+                    client_caps.entry(ns.to_string()).or_insert(json!({}));
+                }
+            }
+        }
+
         let params = json!({
             "protocolVersion": "2024-11-05",
-            "capabilities": {
-                "roots": { "listChanged": true }
-            },
+            "capabilities": client_caps,
             "clientInfo": {
                 "name": "mcpinspector",
                 "version": "0.1.0"

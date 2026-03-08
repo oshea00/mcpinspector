@@ -20,9 +20,11 @@ const RESOURCE_COMMANDS: &[&str] = &["read"];
 const PROMPT_COMMANDS: &[&str] = &["prompt"];
 
 const ALL_COMMANDS: &[&str] = &[
-    "connect", "connect-http", "disconnect", "status",
+    "connect", "connect-http", "disconnect", "reconnect", "status",
     "tools", "call", "resources", "read", "prompts", "prompt",
-    "export", "set-name", "set-env", "set-timeout", "log", "help", "history", "clear",
+    "export", "set-name", "set-env", "set-timeout",
+    "cap-set", "cap-list", "cap-remove",
+    "log", "help", "history", "clear",
     "quit", "exit",
 ];
 
@@ -228,6 +230,13 @@ pub async fn run_repl(state: &mut ReplState, live_notifications: bool) -> Result
                         }
                         Notification::PromptListChanged => {
                             println!("[notification] prompts list changed");
+                        }
+                        Notification::ServerRequest { method, responded, .. } => {
+                            if *responded {
+                                println!("[server→client] {method} (responded)");
+                            } else {
+                                println!("[server→client] {method} (no handler — replied method-not-found)");
+                            }
                         }
                         Notification::Unknown { method, .. } => {
                             println!("[notification] {method}");

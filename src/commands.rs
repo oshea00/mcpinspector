@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use colored::Colorize;
+use comfy_table::{Table, Cell, Color, Attribute};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
@@ -24,6 +25,7 @@ pub async fn handle_command(state: &mut ReplState, line: &str) -> Result<bool> {
         "connect" => cmd_connect(state, args).await?,
         "connect-http" => cmd_connect_http(state, args).await?,
         "disconnect" => cmd_disconnect(state).await?,
+        "reconnect" => cmd_reconnect(state).await?,
         "status" => cmd_status(state).await?,
         "tools" => cmd_tools(state).await?,
         "call" => cmd_call(state, args, line).await?,
@@ -35,6 +37,9 @@ pub async fn handle_command(state: &mut ReplState, line: &str) -> Result<bool> {
         "set-name" => cmd_set_name(state, args)?,
         "set-env" => cmd_set_env(state, args)?,
         "set-timeout" => cmd_set_timeout(state, args)?,
+        "cap-set" => cmd_cap_set(state, args, line).await?,
+        "cap-list" => cmd_cap_list(state).await,
+        "cap-remove" => cmd_cap_remove(state, args).await?,
         "log" => cmd_log(state),
         "help" => cmd_help(args),
         "history" => cmd_history(state),
@@ -67,7 +72,7 @@ async fn cmd_connect(state: &mut ReplState, args: &[String]) -> Result<()> {
     let (mut transport, channels) = StdioTransport::spawn(&command, &cmd_args, &env)?;
 
     let (notif_tx, notif_rx) = mpsc::channel::<Notification>(256);
-    let client = McpClient::new(channels.tx, channels.rx, notif_tx, state.timeout_secs);
+    let client = McpClient::new(channels.tx, channels.rx, notif_tx, state.timeout_secs, state.client_capabilities.clone());
 
     match client.initialize().await {
         Ok(caps) => {
@@ -129,7 +134,7 @@ async fn cmd_connect_http(state: &mut ReplState, args: &[String]) -> Result<()> 
 
     let channels = HttpTransport::connect(url.clone())?;
     let (notif_tx, notif_rx) = mpsc::channel::<Notification>(256);
-    let client = McpClient::new(channels.tx, channels.rx, notif_tx, state.timeout_secs);
+    let client = McpClient::new(channels.tx, channels.rx, notif_tx, state.timeout_secs, state.client_capabilities.clone());
 
     match client.initialize().await {
         Ok(caps) => {
@@ -172,6 +177,31 @@ async fn cmd_disconnect(state: &mut ReplState) -> Result<()> {
     }
     display::print_success("Disconnected.");
     Ok(())
+}
+
+async fn cmd_reconnect(state: &mut ReplState) -> Result<()> {
+    let command = state.config.command.clone();
+    let args = state.config.args.clone();
+    let url = state.config.url.clone();
+    let transport_type = state.config.transport_type.clone();
+
+    match transport_type {
+        TransportType::Stdio => {
+            if command.is_empty() {
+                display::print_error("No previous stdio connection to reconnect to.");
+                return Ok(());
+            }
+            let all_args: Vec<String> = std::iter::once(command).chain(args).collect();
+            cmd_connect(state, &all_args).await
+        }
+        TransportType::Http => {
+            if url.is_empty() {
+                display::print_error("No previous HTTP connection to reconnect to.");
+                return Ok(());
+            }
+            cmd_connect_http(state, &[url]).await
+        }
+    }
 }
 
 async fn cmd_status(state: &mut ReplState) -> Result<()> {
@@ -358,6 +388,66 @@ fn cmd_set_env(state: &mut ReplState, args: &[String]) -> Result<()> {
     Ok(())
 }
 
+async fn cmd_cap_set(state: &mut ReplState, args: &[String], raw_line: &str) -> Result<()> {
+    if args.is_empty() {
+        display::print_error("Usage: cap-set <method> <json_response>");
+        display::print_error("  e.g. cap-set roots/list {\"roots\":[{\"uri\":\"file:///home/user/repos\",\"name\":\"repos\"}]}");
+        return Ok(());
+    }
+    let method = args[0].clone();
+    let json_str = raw_json_arg(raw_line, 2)
+        .ok_or_else(|| anyhow!("Missing JSON response argument"))?;
+    let payload: Value = serde_json::from_str(json_str)
+        .map_err(|e| anyhow!("Invalid JSON: {e}"))?;
+
+    {
+        let mut caps = state.client_capabilities.lock().await;
+        caps.insert(method.clone(), payload);
+    }
+    display::print_success(&format!("Capability handler set for '{method}'"));
+    if state.is_connected() {
+        display::print_info("Note: reconnect for capability to be advertised in initialize handshake.");
+    }
+    Ok(())
+}
+
+async fn cmd_cap_list(state: &ReplState) {
+    let caps = state.client_capabilities.lock().await;
+    if caps.is_empty() {
+        println!("No client capability handlers configured.");
+        println!("Use 'cap-set <method> <json>' to add one.");
+        return;
+    }
+    let mut table = Table::new();
+    table.set_header(vec![
+        Cell::new("Method").add_attribute(Attribute::Bold).fg(Color::Cyan),
+        Cell::new("Response Payload").add_attribute(Attribute::Bold).fg(Color::Cyan),
+    ]);
+    for (method, payload) in caps.iter() {
+        let pretty = serde_json::to_string_pretty(payload).unwrap_or_default();
+        table.add_row(vec![
+            Cell::new(method).fg(Color::Green),
+            Cell::new(&pretty),
+        ]);
+    }
+    println!("{table}");
+}
+
+async fn cmd_cap_remove(state: &mut ReplState, args: &[String]) -> Result<()> {
+    if args.is_empty() {
+        display::print_error("Usage: cap-remove <method>");
+        return Ok(());
+    }
+    let method = &args[0];
+    let mut caps = state.client_capabilities.lock().await;
+    if caps.remove(method).is_some() {
+        display::print_success(&format!("Removed capability handler for '{method}'"));
+    } else {
+        display::print_info(&format!("No handler registered for '{method}'"));
+    }
+    Ok(())
+}
+
 fn cmd_log(state: &mut ReplState) {
     display::print_notifications(&state.pending_notifications);
     state.pending_notifications.clear();
@@ -392,6 +482,7 @@ fn print_full_help() {
     println!("  {:30} {}", "connect <cmd> [args...]", "Connect via stdio transport");
     println!("  {:30} {}", "connect-http <url>", "Connect via HTTP/SSE transport");
     println!("  {:30} {}", "disconnect", "Disconnect from server");
+    println!("  {:30} {}", "reconnect", "Reconnect using the current connection command");
     println!("  {:30} {}", "status", "Show connection status and capabilities");
     println!();
     println!("{}", "Tools:".yellow().bold());
@@ -411,6 +502,11 @@ fn print_full_help() {
     println!("  {:30} {}", "set-env <key> <val>", "Add environment variable");
     println!("  {:30} {}", "set-timeout <seconds>", "Set request timeout (default: 10s)");
     println!("  {:30} {}", "export [filename]", "Export Claude Desktop JSON config");
+    println!();
+    println!("{}", "Client Capabilities:".yellow().bold());
+    println!("  {:30} {}", "cap-set <method> <json>", "Register a handler for a server request");
+    println!("  {:30} {}", "cap-list", "Show all configured capability handlers");
+    println!("  {:30} {}", "cap-remove <method>", "Remove a capability handler");
     println!();
     println!("{}", "Other:".yellow().bold());
     println!("  {:30} {}", "log", "Show buffered server notifications");
@@ -445,6 +541,24 @@ fn print_command_help(cmd: &str) {
             println!("  Export Claude Desktop-compatible JSON configuration.");
             println!("  If no filename given, prints to stdout.");
             println!("  Example: export myserver.json");
+        }
+        "cap-set" => {
+            println!("{}", "cap-set <method> <json_response>".bold());
+            println!("  Register a fixed JSON response for a server-initiated request.");
+            println!("  Must be set before connecting — capabilities are advertised in initialize.");
+            println!("  The capability namespace is derived from the method (e.g. 'roots/list' → 'roots').");
+            println!();
+            println!("  Example (filesystem server roots):");
+            println!("    cap-set roots/list {{\"roots\":[{{\"uri\":\"file:///home/user/repos\",\"name\":\"repos\"}}]}}");
+        }
+        "cap-list" => {
+            println!("{}", "cap-list".bold());
+            println!("  Show all configured client capability handlers.");
+        }
+        "cap-remove" => {
+            println!("{}", "cap-remove <method>".bold());
+            println!("  Remove a configured capability handler.");
+            println!("  Example: cap-remove roots/list");
         }
         _ => {
             println!("No specific help for '{cmd}'. Type 'help' for all commands.");

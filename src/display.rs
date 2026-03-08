@@ -170,6 +170,18 @@ pub fn print_notifications(notifications: &[Notification]) {
             Notification::PromptListChanged => {
                 println!("{prefix} {}", "prompts/list_changed".cyan());
             }
+            Notification::ServerRequest { method, params, responded } => {
+                let label = format!("server→client: {method}").magenta().to_string();
+                let status = if *responded {
+                    "responded".green().to_string()
+                } else {
+                    "no handler (replied method-not-found)".yellow().to_string()
+                };
+                let params_str = params.as_ref()
+                    .map(|p| format!(" params={p}"))
+                    .unwrap_or_default();
+                println!("{prefix} {label}{}{} — {status}", params_str.dimmed(), "".normal());
+            }
             Notification::Unknown { method, params } => {
                 let params_str = params.as_ref()
                     .map(|p| p.to_string())

@@ -4,6 +4,7 @@ use anyhow::Result;
 use serde_json::{json, Value};
 use tokio::sync::{mpsc, Mutex};
 
+
 use crate::protocol::{Notification, ServerCapabilities};
 use crate::protocol::client::McpClient;
 
@@ -62,6 +63,9 @@ pub struct ReplState {
     pub completer_state: Arc<CompleterState>,
     pub history: Vec<String>,
     pub timeout_secs: u64,
+    /// Configured client capability handlers: method → fixed JSON response.
+    /// Shared with McpClient so the reader task can respond to server requests at runtime.
+    pub client_capabilities: Arc<Mutex<HashMap<String, Value>>>,
 }
 
 impl ReplState {
@@ -76,6 +80,7 @@ impl ReplState {
             completer_state,
             history: Vec::new(),
             timeout_secs: DEFAULT_TIMEOUT_SECS,
+            client_capabilities: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 

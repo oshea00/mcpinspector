@@ -2,6 +2,18 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 // JSON-RPC 2.0 wire types
+
+/// A request sent *from the server* to the client (e.g. roots/list, sampling/createMessage).
+/// Uses `Value` for `id` because servers may send integer or string ids.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct JsonRpcServerRequest {
+    pub jsonrpc: String,
+    pub id: Value,
+    pub method: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<Value>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JsonRpcRequest {
     pub jsonrpc: String,
@@ -101,6 +113,8 @@ pub enum Notification {
     ToolListChanged,
     ResourceListChanged,
     PromptListChanged,
+    /// A request the server sent to us. `responded` is false when no handler was configured.
+    ServerRequest { method: String, params: Option<Value>, responded: bool },
     Unknown { method: String, params: Option<Value> },
 }
 

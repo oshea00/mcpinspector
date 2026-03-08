@@ -174,6 +174,86 @@ Tab completion works for prompt names after `prompt`.
 
 ---
 
+### Client Capabilities
+
+MCP supports server-to-client requests — the server can call back into the client to ask questions during a session. Common examples are `roots/list` (filesystem server asking for your workspace roots) and `sampling/createMessage` (a server asking the client to run an LLM completion).
+
+`mcpi` lets you configure fixed JSON responses for these server-initiated methods. When a handler is registered, the capability is automatically advertised in the `initialize` handshake so the server knows it can call that method.
+
+#### `cap-set <method> <json>`
+Register a fixed JSON response for a server-initiated method. Must be set **before connecting** so the capability is included in the `initialize` advertisement.
+
+```
+mcpi> cap-set roots/list {"roots":[{"uri":"file:///home/user/repos","name":"repos"}]}
+mcpi> cap-set sampling/createMessage {"role":"assistant","content":{"type":"text","text":"stub"}}
+```
+
+#### `cap-list`
+Show all configured capability handlers and their response payloads.
+
+```
+mcpi> cap-list
+```
+
+#### `cap-remove <method>`
+Remove a configured handler.
+
+```
+mcpi> cap-remove roots/list
+```
+
+---
+
+#### Example: `roots/list` with `server-filesystem`
+
+The `@modelcontextprotocol/server-filesystem` package will call `roots/list` on the client immediately after connecting, to discover which workspace roots it should treat as authoritative. Without a handler, the server times out, logs a `notifications/cancelled` error, and carries on (using only the directories you passed on the command line).
+
+With a handler configured, the server receives a real response and the exchange completes cleanly:
+
+```
+$ mcpi
+MCP Inspector (mcpi)
+Type 'help' for available commands, 'quit' to exit.
+
+mcpi> cap-set roots/list {"roots":[{"uri":"file:///home/oshea00/repos","name":"repos"}]}
+✓ Capability handler set for 'roots/list'
+
+mcpi> connect npx @modelcontextprotocol/server-filesystem /home/oshea00/repos
+ℹ Connecting to 'npx'...
+✓ Connected!
++------------+--------------+
+| Capability | Supported    |
++===========================+
+| tools      | yes          |
+|------------+--------------|
+| resources  | no           |
+|------------+--------------|
+| prompts    | no           |
+|------------+--------------|
+| logging    | no           |
++------------+--------------+
+
+mcpi> call list_allowed_directories
+ℹ Calling tool 'list_allowed_directories'...
+Allowed directories:
+/home/oshea00/repos
+[1 new notification(s) — type 'log' to view]
+
+mcpi> log
+[1] server→client: roots/list — responded
+```
+
+Compare this to the same session **without** a handler:
+
+```
+mcpi> log
+[1] server→client: roots/list — no handler (replied method-not-found)
+```
+
+Without a handler `mcpi` still replies immediately with a `method-not-found` error (so the server doesn't hang waiting for a timeout), but records the event in the notification log so you can see the interchange took place.
+
+---
+
 ### Configuration & Export
 
 #### `set-timeout <seconds>`
@@ -364,5 +444,6 @@ mcpi> quit
 - `resources/list`, `resources/read`
 - `prompts/list`, `prompts/get`
 - Incoming notifications: `notifications/message`, `notifications/tools/list_changed`, `notifications/resources/list_changed`, `notifications/prompts/list_changed`
+- Server-to-client requests: any method registered via `cap-set` is responded to with the configured payload; unregistered methods receive a `method-not-found` error immediately (no silent timeout)
 
 Requests time out after 10 seconds by default (configurable via `--timeout` or `set-timeout`). If the server process exits before responding, pending requests fail immediately rather than waiting for the timeout. Server stderr output is captured and shown in the error message on connection failure.
