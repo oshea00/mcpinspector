@@ -22,6 +22,7 @@ pub struct ConnectionConfig {
     pub args: Vec<String>,
     pub env: HashMap<String, String>,
     pub url: String,
+    pub bearer_token: Option<String>,
 }
 
 impl Default for ConnectionConfig {
@@ -32,6 +33,7 @@ impl Default for ConnectionConfig {
             args: Vec::new(),
             env: HashMap::new(),
             url: String::new(),
+            bearer_token: None,
         }
     }
 }

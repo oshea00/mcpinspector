@@ -38,6 +38,10 @@ struct Cli {
     #[arg(short = 'e', value_name = "KEY=VALUE", action = clap::ArgAction::Append)]
     env: Vec<String>,
 
+    /// Bearer token for HTTP Authorization header (use $VARNAME to pass from env)
+    #[arg(long, value_name = "TOKEN")]
+    bearer: Option<String>,
+
     /// Print raw protocol messages to stderr for debugging
     #[arg(long)]
     debug: bool,
@@ -51,6 +55,7 @@ async fn main() -> Result<()> {
     let mut state = ReplState::new(completer_state);
     state.timeout_secs = cli.timeout;
     state.debug = cli.debug;
+    state.config.bearer_token = cli.bearer;
 
     // Populate env vars from -e KEY=VALUE flags
     for kv in &cli.env {

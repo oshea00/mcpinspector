@@ -133,7 +133,7 @@ async fn cmd_connect_http(state: &mut ReplState, args: &[String]) -> Result<()> 
     let url = args[0].clone();
     display::print_info(&format!("Connecting to '{url}'..."));
 
-    let channels = HttpTransport::connect(url.clone())?;
+    let channels = HttpTransport::connect(url.clone(), state.config.bearer_token.clone())?;
     let (notif_tx, notif_rx) = mpsc::channel::<Notification>(256);
     let client = McpClient::new(channels.tx, channels.rx, notif_tx, state.timeout_secs, state.client_capabilities.clone(), state.debug);
 

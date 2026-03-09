@@ -47,6 +47,7 @@ mcpi [OPTIONS]
 |------|-------------|
 | `--connect <CMD>` | Connect to a stdio MCP server on startup |
 | `--connect-http <URL>` | Connect to an HTTP MCP server on startup |
+| `--bearer <TOKEN>` | Bearer token for HTTP `Authorization` header |
 | `--live` | Print server notifications immediately instead of buffering them |
 | `--timeout <SECS>` | Request timeout in seconds (default: 10) |
 | `-e <KEY=VALUE>` | Pass an environment variable to the server process (repeatable) |
@@ -65,6 +66,9 @@ mcpi --connect "npx -y @modelcontextprotocol/server-filesystem /tmp"
 
 # Auto-connect to an HTTP server on startup
 mcpi --connect-http http://localhost:3000/mcp
+
+# Auto-connect to an HTTP server with a Bearer token
+mcpi --connect-http http://localhost:3000/mcp --bearer $JWTTOKEN
 
 # Print server notifications live as they arrive
 mcpi --live --connect "npx -y @modelcontextprotocol/server-filesystem /tmp"

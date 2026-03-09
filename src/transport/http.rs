@@ -8,7 +8,7 @@ use crate::transport::TransportChannels;
 pub struct HttpTransport;
 
 impl HttpTransport {
-    pub fn connect(url: String) -> Result<TransportChannels> {
+    pub fn connect(url: String, bearer_token: Option<String>) -> Result<TransportChannels> {
         let client = Client::new();
         let _url_clone = url.clone();
 
@@ -28,11 +28,11 @@ impl HttpTransport {
                     Err(_) => continue,
                 };
 
-                match client_clone
-                    .post(&post_url)
-                    .json(&body)
-                    .send()
-                    .await
+                let mut req = client_clone.post(&post_url).json(&body);
+                if let Some(token) = &bearer_token {
+                    req = req.header("Authorization", format!("Bearer {token}"));
+                }
+                match req.send().await
                 {
                     Ok(resp) => {
                         let content_type = resp.headers()
