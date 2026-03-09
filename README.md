@@ -5,6 +5,7 @@ An interactive command-line tool for connecting to and inspecting [Model Context
 ## Features
 
 - Connect to MCP servers via **stdio** (subprocess) or **HTTP/SSE** transports
+- Supports Authorization header Bearer tokens via --bearer parameter
 - Inspect and invoke **tools**, **resources**, and **prompts**
 - View server **notifications** in real time or buffered
 - **Tab completion** for commands, tool names, resource URIs, and prompt names
