@@ -1,12 +1,11 @@
-use std::collections::HashMap;
-use std::sync::Arc;
 use anyhow::Result;
 use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
-
-use crate::protocol::{Notification, ServerCapabilities};
 use crate::protocol::client::McpClient;
+use crate::protocol::{Notification, ServerCapabilities};
 use crate::transport::stdio::StdioTransport;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -140,4 +139,130 @@ pub fn write_config(state: &ReplState, filename: Option<&str>) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::client::McpClient;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use tokio::sync::{mpsc, Mutex};
+
+    fn make_state() -> ReplState {
+        ReplState::new(CompleterState::new())
+    }
+
+    #[test]
+    fn export_config_stdio_no_env() {
+        let state = make_state();
+        let v = export_config(&state);
+        let entry = &v["mcpServers"]["mcp-server"];
+        assert!(entry.get("command").is_some());
+        assert!(entry.get("args").is_some());
+        assert!(entry.get("env").is_none());
+    }
+
+    #[test]
+    fn export_config_stdio_with_env() {
+        let mut state = make_state();
+        state
+            .config
+            .env
+            .insert("MY_VAR".to_string(), "val".to_string());
+        let v = export_config(&state);
+        let entry = &v["mcpServers"]["mcp-server"];
+        assert!(entry.get("env").is_some());
+        assert_eq!(entry["env"]["MY_VAR"], "val");
+    }
+
+    #[test]
+    fn export_config_http_no_env() {
+        let mut state = make_state();
+        state.config.transport_type = TransportType::Http;
+        state.config.url = "http://localhost:3000".to_string();
+        let v = export_config(&state);
+        let entry = &v["mcpServers"]["mcp-server"];
+        assert!(entry.get("url").is_some());
+        assert!(entry.get("command").is_none());
+        assert!(entry.get("env").is_none());
+    }
+
+    #[test]
+    fn export_config_http_with_env() {
+        let mut state = make_state();
+        state.config.transport_type = TransportType::Http;
+        state.config.url = "http://localhost:3000".to_string();
+        state
+            .config
+            .env
+            .insert("API_KEY".to_string(), "secret".to_string());
+        let v = export_config(&state);
+        let entry = &v["mcpServers"]["mcp-server"];
+        assert!(entry.get("env").is_some());
+        assert_eq!(entry["env"]["API_KEY"], "secret");
+    }
+
+    #[test]
+    fn export_config_uses_server_name_as_key() {
+        let mut state = make_state();
+        state.server_name = "my-custom-server".to_string();
+        let v = export_config(&state);
+        assert!(v["mcpServers"].get("my-custom-server").is_some());
+        assert!(v["mcpServers"].get("mcp-server").is_none());
+    }
+
+    #[test]
+    fn connection_config_default_values() {
+        let cfg = ConnectionConfig::default();
+        assert_eq!(cfg.transport_type, TransportType::Stdio);
+        assert!(cfg.command.is_empty());
+        assert!(cfg.args.is_empty());
+        assert!(cfg.env.is_empty());
+        assert!(cfg.url.is_empty());
+        assert!(cfg.bearer_token.is_none());
+    }
+
+    #[test]
+    fn repl_state_is_connected_false() {
+        let state = make_state();
+        assert!(!state.is_connected());
+    }
+
+    #[tokio::test]
+    async fn repl_state_is_connected_true() {
+        let (tx, rx) = mpsc::channel::<String>(1);
+        let (notif_tx, _notif_rx) = mpsc::channel(1);
+        let caps = Arc::new(Mutex::new(HashMap::new()));
+        let client = McpClient::new(tx, rx, notif_tx, 10, caps, false);
+        let mut state = make_state();
+        state.client = Some(client);
+        assert!(state.is_connected());
+    }
+
+    #[tokio::test]
+    async fn completer_state_new_empty() {
+        let cs = CompleterState::new();
+        assert!(cs.tools.lock().await.is_empty());
+        assert!(cs.resources.lock().await.is_empty());
+        assert!(cs.prompts.lock().await.is_empty());
+    }
+
+    #[test]
+    fn write_config_to_file() {
+        let state = make_state();
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let path = tmp.path().to_str().unwrap().to_string();
+        drop(tmp);
+        write_config(&state, Some(&path)).unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        let val: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert!(val.get("mcpServers").is_some());
+    }
+
+    #[test]
+    fn write_config_no_panic_stdout() {
+        let state = make_state();
+        assert!(write_config(&state, None).is_ok());
+    }
 }

@@ -1,15 +1,15 @@
-use std::collections::HashMap;
-use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::{timeout, Duration};
 use uuid::Uuid;
 
 use crate::protocol::{
-    JsonRpcRequest, JsonRpcResponse, JsonRpcNotification, JsonRpcServerRequest, Notification,
-    McpTool, McpResource, McpPrompt, McpPromptMessage, ServerCapabilities,
+    JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, JsonRpcServerRequest, McpPrompt,
+    McpPromptMessage, McpResource, McpTool, Notification, ServerCapabilities,
 };
 
 pub struct McpClient {
@@ -76,10 +76,10 @@ impl McpClient {
                 }
 
                 if let Ok(val) = serde_json::from_str::<Value>(trimmed) {
-                    let has_id     = val.get("id").is_some();
+                    let has_id = val.get("id").is_some();
                     let has_method = val.get("method").is_some();
                     let has_result = val.get("result").is_some();
-                    let has_error  = val.get("error").is_some();
+                    let has_error = val.get("error").is_some();
 
                     if has_id && (has_result || has_error) {
                         // Client-bound response to one of our requests
@@ -133,11 +133,13 @@ impl McpClient {
                                 }
                             };
                             drop(handlers);
-                            let _ = notif_tx_clone.send(Notification::ServerRequest {
-                                method: req.method,
-                                params: req.params,
-                                responded,
-                            }).await;
+                            let _ = notif_tx_clone
+                                .send(Notification::ServerRequest {
+                                    method: req.method,
+                                    params: req.params,
+                                    responded,
+                                })
+                                .await;
                         }
                     }
                 }
@@ -175,10 +177,13 @@ impl McpClient {
             map.insert(id.clone(), tx);
         }
 
-        self.transport_tx.send(msg).await
+        self.transport_tx
+            .send(msg)
+            .await
             .map_err(|_| anyhow!("Transport send failed"))?;
 
-        let resp = timeout(Duration::from_secs(self.timeout_secs), rx).await
+        let resp = timeout(Duration::from_secs(self.timeout_secs), rx)
+            .await
             .map_err(|_| anyhow!("Request timed out after {}s", self.timeout_secs))?
             .map_err(|_| anyhow!("Server process exited without responding"))?;
 
@@ -212,9 +217,9 @@ impl McpClient {
         });
 
         let result = self.send_request("initialize", Some(params)).await?;
-        let caps: ServerCapabilities = serde_json::from_value(
-            result.get("capabilities").cloned().unwrap_or_default()
-        ).unwrap_or_default();
+        let caps: ServerCapabilities =
+            serde_json::from_value(result.get("capabilities").cloned().unwrap_or_default())
+                .unwrap_or_default();
 
         // Send initialized notification
         let notif = JsonRpcNotification {
@@ -230,9 +235,7 @@ impl McpClient {
 
     pub async fn list_tools(&self) -> Result<Vec<McpTool>> {
         let result = self.send_request("tools/list", None).await?;
-        let tools = result.get("tools")
-            .cloned()
-            .unwrap_or(json!([]));
+        let tools = result.get("tools").cloned().unwrap_or(json!([]));
         Ok(serde_json::from_value(tools)?)
     }
 
@@ -246,9 +249,7 @@ impl McpClient {
 
     pub async fn list_resources(&self) -> Result<Vec<McpResource>> {
         let result = self.send_request("resources/list", None).await?;
-        let resources = result.get("resources")
-            .cloned()
-            .unwrap_or(json!([]));
+        let resources = result.get("resources").cloned().unwrap_or(json!([]));
         Ok(serde_json::from_value(resources)?)
     }
 
@@ -259,21 +260,21 @@ impl McpClient {
 
     pub async fn list_prompts(&self) -> Result<Vec<McpPrompt>> {
         let result = self.send_request("prompts/list", None).await?;
-        let prompts = result.get("prompts")
-            .cloned()
-            .unwrap_or(json!([]));
+        let prompts = result.get("prompts").cloned().unwrap_or(json!([]));
         Ok(serde_json::from_value(prompts)?)
     }
 
-    pub async fn get_prompt(&self, name: &str, args: Option<Value>) -> Result<Vec<McpPromptMessage>> {
+    pub async fn get_prompt(
+        &self,
+        name: &str,
+        args: Option<Value>,
+    ) -> Result<Vec<McpPromptMessage>> {
         let mut params = json!({ "name": name });
         if let Some(a) = args {
             params["arguments"] = a;
         }
         let result = self.send_request("prompts/get", Some(params)).await?;
-        let messages = result.get("messages")
-            .cloned()
-            .unwrap_or(json!([]));
+        let messages = result.get("messages").cloned().unwrap_or(json!([]));
         Ok(serde_json::from_value(messages)?)
     }
 }

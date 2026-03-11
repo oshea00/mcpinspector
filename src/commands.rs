@@ -1,14 +1,14 @@
 use anyhow::{anyhow, Result};
 use colored::Colorize;
-use comfy_table::{Table, Cell, Color, Attribute};
+use comfy_table::{Attribute, Cell, Color, Table};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::config::{ReplState, TransportType, write_config};
+use crate::config::{write_config, ReplState, TransportType};
 use crate::display;
-use crate::protocol::{Notification, McpTool, McpResource, McpPrompt};
 use crate::protocol::client::McpClient;
-use crate::transport::{stdio::StdioTransport, http::HttpTransport};
+use crate::protocol::{McpPrompt, McpResource, McpTool, Notification};
+use crate::transport::{http::HttpTransport, stdio::StdioTransport};
 
 pub async fn handle_command(state: &mut ReplState, line: &str) -> Result<bool> {
     let parts = shell_words::split(line.trim())
@@ -46,7 +46,9 @@ pub async fn handle_command(state: &mut ReplState, line: &str) -> Result<bool> {
         "clear" => cmd_clear(),
         "quit" | "exit" => return Ok(true),
         _ => {
-            display::print_error(&format!("Unknown command: '{cmd}'. Type 'help' for available commands."));
+            display::print_error(&format!(
+                "Unknown command: '{cmd}'. Type 'help' for available commands."
+            ));
         }
     }
 
@@ -72,7 +74,14 @@ async fn cmd_connect(state: &mut ReplState, args: &[String]) -> Result<()> {
     let (mut transport, channels) = StdioTransport::spawn(&command, &cmd_args, &env, state.debug)?;
 
     let (notif_tx, notif_rx) = mpsc::channel::<Notification>(256);
-    let client = McpClient::new(channels.tx, channels.rx, notif_tx, state.timeout_secs, state.client_capabilities.clone(), state.debug);
+    let client = McpClient::new(
+        channels.tx,
+        channels.rx,
+        notif_tx,
+        state.timeout_secs,
+        state.client_capabilities.clone(),
+        state.debug,
+    );
 
     match client.initialize().await {
         Ok(caps) => {
@@ -135,7 +144,14 @@ async fn cmd_connect_http(state: &mut ReplState, args: &[String]) -> Result<()> 
 
     let channels = HttpTransport::connect(url.clone(), state.config.bearer_token.clone())?;
     let (notif_tx, notif_rx) = mpsc::channel::<Notification>(256);
-    let client = McpClient::new(channels.tx, channels.rx, notif_tx, state.timeout_secs, state.client_capabilities.clone(), state.debug);
+    let client = McpClient::new(
+        channels.tx,
+        channels.rx,
+        notif_tx,
+        state.timeout_secs,
+        state.client_capabilities.clone(),
+        state.debug,
+    );
 
     match client.initialize().await {
         Ok(caps) => {
@@ -218,7 +234,11 @@ async fn cmd_status(state: &mut ReplState) -> Result<()> {
     match state.config.transport_type {
         TransportType::Stdio => {
             println!("Transport: stdio");
-            println!("Command: {} {}", state.config.command, state.config.args.join(" "));
+            println!(
+                "Command: {} {}",
+                state.config.command,
+                state.config.args.join(" ")
+            );
         }
         TransportType::Http => {
             println!("Transport: http");
@@ -226,7 +246,16 @@ async fn cmd_status(state: &mut ReplState) -> Result<()> {
         }
     }
     if !state.config.env.is_empty() {
-        println!("Env vars: {}", state.config.env.keys().cloned().collect::<Vec<_>>().join(", "));
+        println!(
+            "Env vars: {}",
+            state
+                .config
+                .env
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
     if let Some(caps) = &state.capabilities {
         println!("\nCapabilities:");
@@ -235,13 +264,19 @@ async fn cmd_status(state: &mut ReplState) -> Result<()> {
     println!("Timeout: {}s", state.timeout_secs);
     let count = state.pending_notifications.len();
     if count > 0 {
-        println!("{} pending notification(s). Type 'log' to view.", count.to_string().yellow());
+        println!(
+            "{} pending notification(s). Type 'log' to view.",
+            count.to_string().yellow()
+        );
     }
     Ok(())
 }
 
 async fn cmd_tools(state: &mut ReplState) -> Result<()> {
-    let client = state.client.as_ref().ok_or_else(|| anyhow!("Not connected"))?;
+    let client = state
+        .client
+        .as_ref()
+        .ok_or_else(|| anyhow!("Not connected"))?;
     let tools = client.list_tools().await?;
 
     // Update completer
@@ -256,16 +291,22 @@ async fn cmd_tools(state: &mut ReplState) -> Result<()> {
 
 /// Extract raw JSON from the original input line, skipping `skip` whitespace-delimited words.
 /// This avoids shell-word quote stripping mangling JSON strings.
-fn raw_json_arg(line: &str, skip: usize) -> Option<&str> {
+pub(crate) fn raw_json_arg(line: &str, skip: usize) -> Option<&str> {
     let mut remaining = line.trim();
     for _ in 0..skip {
         remaining = remaining.trim_start();
         // skip one word (no quote handling needed here — just find next whitespace)
-        let end = remaining.find(|c: char| c.is_whitespace()).unwrap_or(remaining.len());
+        let end = remaining
+            .find(|c: char| c.is_whitespace())
+            .unwrap_or(remaining.len());
         remaining = &remaining[end..];
     }
     let trimmed = remaining.trim();
-    if trimmed.is_empty() { None } else { Some(trimmed) }
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
 }
 
 async fn cmd_call(state: &mut ReplState, args: &[String], raw_line: &str) -> Result<()> {
@@ -274,13 +315,14 @@ async fn cmd_call(state: &mut ReplState, args: &[String], raw_line: &str) -> Res
         return Ok(());
     }
 
-    let client = state.client.as_ref().ok_or_else(|| anyhow!("Not connected"))?;
+    let client = state
+        .client
+        .as_ref()
+        .ok_or_else(|| anyhow!("Not connected"))?;
     let name = &args[0];
     let json_args: Option<Value> = if args.len() > 1 {
-        let json_str = raw_json_arg(raw_line, 2)
-            .ok_or_else(|| anyhow!("Missing JSON argument"))?;
-        Some(serde_json::from_str(json_str)
-            .map_err(|e| anyhow!("Invalid JSON: {e}"))?)
+        let json_str = raw_json_arg(raw_line, 2).ok_or_else(|| anyhow!("Missing JSON argument"))?;
+        Some(serde_json::from_str(json_str).map_err(|e| anyhow!("Invalid JSON: {e}"))?)
     } else {
         None
     };
@@ -292,7 +334,10 @@ async fn cmd_call(state: &mut ReplState, args: &[String], raw_line: &str) -> Res
 }
 
 async fn cmd_resources(state: &mut ReplState) -> Result<()> {
-    let client = state.client.as_ref().ok_or_else(|| anyhow!("Not connected"))?;
+    let client = state
+        .client
+        .as_ref()
+        .ok_or_else(|| anyhow!("Not connected"))?;
     let resources = client.list_resources().await?;
 
     {
@@ -310,7 +355,10 @@ async fn cmd_read(state: &mut ReplState, args: &[String]) -> Result<()> {
         return Ok(());
     }
 
-    let client = state.client.as_ref().ok_or_else(|| anyhow!("Not connected"))?;
+    let client = state
+        .client
+        .as_ref()
+        .ok_or_else(|| anyhow!("Not connected"))?;
     let uri = &args[0];
     let result = client.read_resource(uri).await?;
     display::print_resource_result(&result);
@@ -318,7 +366,10 @@ async fn cmd_read(state: &mut ReplState, args: &[String]) -> Result<()> {
 }
 
 async fn cmd_prompts(state: &mut ReplState) -> Result<()> {
-    let client = state.client.as_ref().ok_or_else(|| anyhow!("Not connected"))?;
+    let client = state
+        .client
+        .as_ref()
+        .ok_or_else(|| anyhow!("Not connected"))?;
     let prompts = client.list_prompts().await?;
 
     {
@@ -336,13 +387,14 @@ async fn cmd_prompt(state: &mut ReplState, args: &[String], raw_line: &str) -> R
         return Ok(());
     }
 
-    let client = state.client.as_ref().ok_or_else(|| anyhow!("Not connected"))?;
+    let client = state
+        .client
+        .as_ref()
+        .ok_or_else(|| anyhow!("Not connected"))?;
     let name = &args[0];
     let json_args: Option<Value> = if args.len() > 1 {
-        let json_str = raw_json_arg(raw_line, 2)
-            .ok_or_else(|| anyhow!("Missing JSON argument"))?;
-        Some(serde_json::from_str(json_str)
-            .map_err(|e| anyhow!("Invalid JSON: {e}"))?)
+        let json_str = raw_json_arg(raw_line, 2).ok_or_else(|| anyhow!("Missing JSON argument"))?;
+        Some(serde_json::from_str(json_str).map_err(|e| anyhow!("Invalid JSON: {e}"))?)
     } else {
         None
     };
@@ -372,7 +424,8 @@ fn cmd_set_timeout(state: &mut ReplState, args: &[String]) -> Result<()> {
         display::print_error("Usage: set-timeout <seconds>");
         return Ok(());
     }
-    let secs: u64 = args[0].parse()
+    let secs: u64 = args[0]
+        .parse()
         .map_err(|_| anyhow!("Invalid timeout '{}': must be a positive integer", args[0]))?;
     if secs == 0 {
         return Err(anyhow!("Timeout must be at least 1 second"));
@@ -399,10 +452,10 @@ async fn cmd_cap_set(state: &mut ReplState, args: &[String], raw_line: &str) -> 
         return Ok(());
     }
     let method = args[0].clone();
-    let json_str = raw_json_arg(raw_line, 2)
-        .ok_or_else(|| anyhow!("Missing JSON response argument"))?;
-    let payload: Value = serde_json::from_str(json_str)
-        .map_err(|e| anyhow!("Invalid JSON: {e}"))?;
+    let json_str =
+        raw_json_arg(raw_line, 2).ok_or_else(|| anyhow!("Missing JSON response argument"))?;
+    let payload: Value =
+        serde_json::from_str(json_str).map_err(|e| anyhow!("Invalid JSON: {e}"))?;
 
     {
         let mut caps = state.client_capabilities.lock().await;
@@ -410,7 +463,9 @@ async fn cmd_cap_set(state: &mut ReplState, args: &[String], raw_line: &str) -> 
     }
     display::print_success(&format!("Capability handler set for '{method}'"));
     if state.is_connected() {
-        display::print_info("Note: reconnect for capability to be advertised in initialize handshake.");
+        display::print_info(
+            "Note: reconnect for capability to be advertised in initialize handshake.",
+        );
     }
     Ok(())
 }
@@ -424,15 +479,16 @@ async fn cmd_cap_list(state: &ReplState) {
     }
     let mut table = Table::new();
     table.set_header(vec![
-        Cell::new("Method").add_attribute(Attribute::Bold).fg(Color::Cyan),
-        Cell::new("Response Payload").add_attribute(Attribute::Bold).fg(Color::Cyan),
+        Cell::new("Method")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
+        Cell::new("Response Payload")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
     ]);
     for (method, payload) in caps.iter() {
         let pretty = serde_json::to_string_pretty(payload).unwrap_or_default();
-        table.add_row(vec![
-            Cell::new(method).fg(Color::Green),
-            Cell::new(&pretty),
-        ]);
+        table.add_row(vec![Cell::new(method).fg(Color::Green), Cell::new(&pretty)]);
     }
     println!("{table}");
 }
@@ -483,43 +539,72 @@ fn print_full_help() {
     println!("{}", "MCP Inspector Commands".bold().underline());
     println!();
     println!("{}", "Connection:".yellow().bold());
-    println!("  {:30} {}", "connect <cmd> [args...]", "Connect via stdio transport");
-    println!("  {:30} {}", "connect-http <url>", "Connect via HTTP/SSE transport");
-    println!("  {:30} {}", "disconnect", "Disconnect from server");
-    println!("  {:30} {}", "reconnect", "Reconnect using the current connection command");
-    println!("  {:30} {}", "status", "Show connection status and capabilities");
+    println!(
+        "  {:30} Connect via stdio transport",
+        "connect <cmd> [args...]"
+    );
+    println!(
+        "  {:30} Connect via HTTP/SSE transport",
+        "connect-http <url>"
+    );
+    println!("  {:30} Disconnect from server", "disconnect");
+    println!(
+        "  {:30} Reconnect using the current connection command",
+        "reconnect"
+    );
+    println!("  {:30} Show connection status and capabilities", "status");
     println!();
     println!("{}", "Tools:".yellow().bold());
-    println!("  {:30} {}", "tools", "List all available tools");
-    println!("  {:30} {}", "call <name> [json]", "Execute a tool with optional JSON args");
+    println!("  {:30} List all available tools", "tools");
+    println!(
+        "  {:30} Execute a tool with optional JSON args",
+        "call <name> [json]"
+    );
     println!();
     println!("{}", "Resources:".yellow().bold());
-    println!("  {:30} {}", "resources", "List all resources");
-    println!("  {:30} {}", "read <uri>", "Read resource content");
+    println!("  {:30} List all resources", "resources");
+    println!("  {:30} Read resource content", "read <uri>");
     println!();
     println!("{}", "Prompts:".yellow().bold());
-    println!("  {:30} {}", "prompts", "List all prompts");
-    println!("  {:30} {}", "prompt <name> [json]", "Get prompt with optional arguments");
+    println!("  {:30} List all prompts", "prompts");
+    println!(
+        "  {:30} Get prompt with optional arguments",
+        "prompt <name> [json]"
+    );
     println!();
     println!("{}", "Configuration:".yellow().bold());
-    println!("  {:30} {}", "set-name <name>", "Set server name for export");
-    println!("  {:30} {}", "set-env <key> <val>", "Add environment variable");
-    println!("  {:30} {}", "set-timeout <seconds>", "Set request timeout (default: 10s)");
-    println!("  {:30} {}", "export [filename]", "Export Claude Desktop JSON config");
+    println!("  {:30} Set server name for export", "set-name <name>");
+    println!("  {:30} Add environment variable", "set-env <key> <val>");
+    println!(
+        "  {:30} Set request timeout (default: 10s)",
+        "set-timeout <seconds>"
+    );
+    println!(
+        "  {:30} Export Claude Desktop JSON config",
+        "export [filename]"
+    );
     println!();
     println!("{}", "Client Capabilities:".yellow().bold());
-    println!("  {:30} {}", "cap-set <method> <json>", "Register a handler for a server request");
-    println!("  {:30} {}", "cap-list", "Show all configured capability handlers");
-    println!("  {:30} {}", "cap-remove <method>", "Remove a capability handler");
+    println!(
+        "  {:30} Register a handler for a server request",
+        "cap-set <method> <json>"
+    );
+    println!(
+        "  {:30} Show all configured capability handlers",
+        "cap-list"
+    );
+    println!("  {:30} Remove a capability handler", "cap-remove <method>");
     println!();
     println!("{}", "Other:".yellow().bold());
-    println!("  {:30} {}", "log", "Show buffered server notifications");
-    println!("  {:30} {}", "history", "Show command history");
-    println!("  {:30} {}", "clear", "Clear terminal");
-    println!("  {:30} {}", "help [command]", "Show help");
-    println!("  {:30} {}", "quit / exit", "Exit");
+    println!("  {:30} Show buffered server notifications", "log");
+    println!("  {:30} Show command history", "history");
+    println!("  {:30} Clear terminal", "clear");
+    println!("  {:30} Show help", "help [command]");
+    println!("  {:30} Exit", "quit / exit");
     println!();
-    println!("Tip: Tab completion works for commands, tool names, resource URIs, and prompt names.");
+    println!(
+        "Tip: Tab completion works for commands, tool names, resource URIs, and prompt names."
+    );
 }
 
 fn print_command_help(cmd: &str) {
@@ -549,7 +634,9 @@ fn print_command_help(cmd: &str) {
         "cap-set" => {
             println!("{}", "cap-set <method> <json_response>".bold());
             println!("  Register a fixed JSON response for a server-initiated request.");
-            println!("  Must be set before connecting — capabilities are advertised in initialize.");
+            println!(
+                "  Must be set before connecting — capabilities are advertised in initialize."
+            );
             println!("  The capability namespace is derived from the method (e.g. 'roots/list' → 'roots').");
             println!();
             println!("  Example (filesystem server roots):");
@@ -567,5 +654,114 @@ fn print_command_help(cmd: &str) {
         _ => {
             println!("No specific help for '{cmd}'. Type 'help' for all commands.");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{CompleterState, ReplState};
+    use serde_json::json;
+
+    fn make_state() -> ReplState {
+        ReplState::new(CompleterState::new())
+    }
+
+    #[test]
+    fn raw_json_arg_skip_one() {
+        assert_eq!(raw_json_arg(r#"call tool {"a":1}"#, 2), Some(r#"{"a":1}"#));
+    }
+
+    #[test]
+    fn raw_json_arg_skip_two() {
+        assert_eq!(
+            raw_json_arg(r#"cap-set method {"k":"v"}"#, 2),
+            Some(r#"{"k":"v"}"#)
+        );
+    }
+
+    #[test]
+    fn raw_json_arg_no_remaining() {
+        assert_eq!(raw_json_arg("call tool", 2), None);
+    }
+
+    #[test]
+    fn raw_json_arg_empty_input() {
+        assert_eq!(raw_json_arg("", 1), None);
+    }
+
+    #[tokio::test]
+    async fn cmd_quit_returns_true() {
+        let mut state = make_state();
+        assert!(handle_command(&mut state, "quit").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn cmd_exit_returns_true() {
+        let mut state = make_state();
+        assert!(handle_command(&mut state, "exit").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn cmd_empty_returns_false() {
+        let mut state = make_state();
+        assert!(!handle_command(&mut state, "").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn cmd_unknown_returns_false() {
+        let mut state = make_state();
+        assert!(!handle_command(&mut state, "blorp").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn cmd_set_name_updates_state() {
+        let mut state = make_state();
+        handle_command(&mut state, "set-name my-srv").await.unwrap();
+        assert_eq!(state.server_name, "my-srv");
+    }
+
+    #[tokio::test]
+    async fn cmd_set_timeout_valid() {
+        let mut state = make_state();
+        handle_command(&mut state, "set-timeout 30").await.unwrap();
+        assert_eq!(state.timeout_secs, 30);
+    }
+
+    #[tokio::test]
+    async fn cmd_set_timeout_zero_is_error() {
+        let mut state = make_state();
+        assert!(handle_command(&mut state, "set-timeout 0").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn cmd_set_env_inserts_kv() {
+        let mut state = make_state();
+        handle_command(&mut state, "set-env FOO bar").await.unwrap();
+        assert_eq!(state.config.env.get("FOO").map(|s| s.as_str()), Some("bar"));
+    }
+
+    #[tokio::test]
+    async fn cmd_cap_set_inserts_payload() {
+        let mut state = make_state();
+        handle_command(&mut state, r#"cap-set roots/list {"roots":[]}"#)
+            .await
+            .unwrap();
+        let caps = state.client_capabilities.lock().await;
+        assert!(caps.contains_key("roots/list"));
+        assert_eq!(caps["roots/list"], json!({"roots": []}));
+    }
+
+    #[tokio::test]
+    async fn cmd_cap_remove_existing() {
+        let mut state = make_state();
+        handle_command(&mut state, r#"cap-set roots/list {"roots":[]}"#)
+            .await
+            .unwrap();
+        handle_command(&mut state, "cap-remove roots/list")
+            .await
+            .unwrap();
+        let caps = state.client_capabilities.lock().await;
+        assert!(!caps.contains_key("roots/list"));
     }
 }

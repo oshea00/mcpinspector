@@ -885,6 +885,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shell-words",
+ "tempfile",
  "tokio",
  "tokio-util",
  "uuid",

@@ -1,7 +1,7 @@
 use anyhow::Result;
+use futures::StreamExt;
 use reqwest::Client;
 use tokio::sync::mpsc;
-use futures::StreamExt;
 
 use crate::transport::TransportChannels;
 
@@ -32,10 +32,10 @@ impl HttpTransport {
                 if let Some(token) = &bearer_token {
                     req = req.header("Authorization", format!("Bearer {token}"));
                 }
-                match req.send().await
-                {
+                match req.send().await {
                     Ok(resp) => {
-                        let content_type = resp.headers()
+                        let content_type = resp
+                            .headers()
                             .get("content-type")
                             .and_then(|v| v.to_str().ok())
                             .unwrap_or("")
@@ -76,6 +76,9 @@ impl HttpTransport {
             }
         });
 
-        Ok(TransportChannels { tx: out_tx, rx: in_rx })
+        Ok(TransportChannels {
+            tx: out_tx,
+            rx: in_rx,
+        })
     }
 }

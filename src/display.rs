@@ -1,8 +1,8 @@
 use colored::Colorize;
-use comfy_table::{Table, Cell, Color, Attribute};
+use comfy_table::{Attribute, Cell, Color, Table};
 use serde_json::Value;
 
-use crate::protocol::{McpTool, McpResource, McpPrompt, Notification, ServerCapabilities};
+use crate::protocol::{McpPrompt, McpResource, McpTool, Notification, ServerCapabilities};
 
 pub fn print_tools(tools: &[McpTool]) {
     if tools.is_empty() {
@@ -11,9 +11,15 @@ pub fn print_tools(tools: &[McpTool]) {
     }
     let mut table = Table::new();
     table.set_header(vec![
-        Cell::new("Name").add_attribute(Attribute::Bold).fg(Color::Cyan),
-        Cell::new("Description").add_attribute(Attribute::Bold).fg(Color::Cyan),
-        Cell::new("Input Keys").add_attribute(Attribute::Bold).fg(Color::Cyan),
+        Cell::new("Name")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
+        Cell::new("Description")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
+        Cell::new("Input Keys")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
     ]);
     for tool in tools {
         let keys = extract_schema_keys(&tool.input_schema);
@@ -33,10 +39,18 @@ pub fn print_resources(resources: &[McpResource]) {
     }
     let mut table = Table::new();
     table.set_header(vec![
-        Cell::new("URI").add_attribute(Attribute::Bold).fg(Color::Cyan),
-        Cell::new("Name").add_attribute(Attribute::Bold).fg(Color::Cyan),
-        Cell::new("MIME Type").add_attribute(Attribute::Bold).fg(Color::Cyan),
-        Cell::new("Description").add_attribute(Attribute::Bold).fg(Color::Cyan),
+        Cell::new("URI")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
+        Cell::new("Name")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
+        Cell::new("MIME Type")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
+        Cell::new("Description")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
     ]);
     for r in resources {
         table.add_row(vec![
@@ -56,16 +70,26 @@ pub fn print_prompts(prompts: &[McpPrompt]) {
     }
     let mut table = Table::new();
     table.set_header(vec![
-        Cell::new("Name").add_attribute(Attribute::Bold).fg(Color::Cyan),
-        Cell::new("Description").add_attribute(Attribute::Bold).fg(Color::Cyan),
-        Cell::new("Arguments").add_attribute(Attribute::Bold).fg(Color::Cyan),
+        Cell::new("Name")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
+        Cell::new("Description")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
+        Cell::new("Arguments")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
     ]);
     for p in prompts {
-        let args: Vec<String> = p.arguments.iter()
-            .map(|a| if a.required {
-                format!("{}*", a.name)
-            } else {
-                a.name.clone()
+        let args: Vec<String> = p
+            .arguments
+            .iter()
+            .map(|a| {
+                if a.required {
+                    format!("{}*", a.name)
+                } else {
+                    a.name.clone()
+                }
             })
             .collect();
         table.add_row(vec![
@@ -80,24 +104,44 @@ pub fn print_prompts(prompts: &[McpPrompt]) {
 pub fn print_capabilities(caps: &ServerCapabilities) {
     let mut table = Table::new();
     table.set_header(vec![
-        Cell::new("Capability").add_attribute(Attribute::Bold).fg(Color::Cyan),
-        Cell::new("Supported").add_attribute(Attribute::Bold).fg(Color::Cyan),
+        Cell::new("Capability")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
+        Cell::new("Supported")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
     ]);
     table.add_row(vec![
         Cell::new("tools"),
-        Cell::new(if caps.tools.is_some() { "yes".green().to_string() } else { "no".red().to_string() }),
+        Cell::new(if caps.tools.is_some() {
+            "yes".green().to_string()
+        } else {
+            "no".red().to_string()
+        }),
     ]);
     table.add_row(vec![
         Cell::new("resources"),
-        Cell::new(if caps.resources.is_some() { "yes".green().to_string() } else { "no".red().to_string() }),
+        Cell::new(if caps.resources.is_some() {
+            "yes".green().to_string()
+        } else {
+            "no".red().to_string()
+        }),
     ]);
     table.add_row(vec![
         Cell::new("prompts"),
-        Cell::new(if caps.prompts.is_some() { "yes".green().to_string() } else { "no".red().to_string() }),
+        Cell::new(if caps.prompts.is_some() {
+            "yes".green().to_string()
+        } else {
+            "no".red().to_string()
+        }),
     ]);
     table.add_row(vec![
         Cell::new("logging"),
-        Cell::new(if caps.logging.is_some() { "yes".green().to_string() } else { "no".red().to_string() }),
+        Cell::new(if caps.logging.is_some() {
+            "yes".green().to_string()
+        } else {
+            "no".red().to_string()
+        }),
     ]);
     println!("{table}");
 }
@@ -122,10 +166,16 @@ pub fn print_tool_result(result: &Value) {
                 }
             }
         } else {
-            println!("{}", serde_json::to_string_pretty(content).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(content).unwrap_or_default()
+            );
         }
     } else {
-        println!("{}", serde_json::to_string_pretty(result).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(result).unwrap_or_default()
+        );
     }
 }
 
@@ -141,7 +191,10 @@ pub fn print_resource_result(result: &Value) {
             }
         }
     } else {
-        println!("{}", serde_json::to_string_pretty(result).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(result).unwrap_or_default()
+        );
     }
 }
 
@@ -170,22 +223,29 @@ pub fn print_notifications(notifications: &[Notification]) {
             Notification::PromptListChanged => {
                 println!("{prefix} {}", "prompts/list_changed".cyan());
             }
-            Notification::ServerRequest { method, params, responded } => {
+            Notification::ServerRequest {
+                method,
+                params,
+                responded,
+            } => {
                 let label = format!("server→client: {method}").magenta().to_string();
                 let status = if *responded {
                     "responded".green().to_string()
                 } else {
                     "no handler (replied method-not-found)".yellow().to_string()
                 };
-                let params_str = params.as_ref()
+                let params_str = params
+                    .as_ref()
                     .map(|p| format!(" params={p}"))
                     .unwrap_or_default();
-                println!("{prefix} {label}{}{} — {status}", params_str.dimmed(), "".normal());
+                println!(
+                    "{prefix} {label}{}{} — {status}",
+                    params_str.dimmed(),
+                    "".normal()
+                );
             }
             Notification::Unknown { method, params } => {
-                let params_str = params.as_ref()
-                    .map(|p| p.to_string())
-                    .unwrap_or_default();
+                let params_str = params.as_ref().map(|p| p.to_string()).unwrap_or_default();
                 println!("{prefix} {} {}", method.dimmed(), params_str.dimmed());
             }
         }
@@ -207,8 +267,9 @@ pub fn print_prompt_messages(messages: &[crate::protocol::McpPromptMessage]) {
     }
 }
 
-fn extract_schema_keys(schema: &Value) -> String {
-    schema.get("properties")
+pub(crate) fn extract_schema_keys(schema: &Value) -> String {
+    schema
+        .get("properties")
         .and_then(|p| p.as_object())
         .map(|obj| {
             let keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
@@ -217,7 +278,7 @@ fn extract_schema_keys(schema: &Value) -> String {
         .unwrap_or_default()
 }
 
-fn truncate(s: &str, max: usize) -> String {
+pub(crate) fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         s.to_string()
     } else {
@@ -235,4 +296,60 @@ pub fn print_success(msg: &str) {
 
 pub fn print_info(msg: &str) {
     println!("{} {}", "ℹ".blue(), msg);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn truncate_short_string_unchanged() {
+        assert_eq!(truncate("hello", 10), "hello");
+    }
+
+    #[test]
+    fn truncate_exact_length_unchanged() {
+        assert_eq!(truncate("hello", 5), "hello");
+    }
+
+    #[test]
+    fn truncate_long_string_adds_ellipsis() {
+        let result = truncate("hello world", 6);
+        assert!(result.starts_with("hello"));
+        assert!(result.contains('…'));
+        assert!(result.chars().count() <= 6);
+    }
+
+    #[test]
+    fn truncate_empty_string() {
+        assert_eq!(truncate("", 5), "");
+    }
+
+    #[test]
+    fn extract_schema_keys_with_properties() {
+        let schema = json!({"properties": {"a": {}, "b": {}}});
+        let keys = extract_schema_keys(&schema);
+        // Keys may be in any order
+        assert!(keys.contains('a'));
+        assert!(keys.contains('b'));
+        assert!(keys.contains(", "));
+    }
+
+    #[test]
+    fn extract_schema_keys_no_properties_key() {
+        let schema = json!({"type": "object"});
+        assert_eq!(extract_schema_keys(&schema), "");
+    }
+
+    #[test]
+    fn extract_schema_keys_empty_properties() {
+        let schema = json!({"properties": {}});
+        assert_eq!(extract_schema_keys(&schema), "");
+    }
+
+    #[test]
+    fn print_tools_empty_no_panic() {
+        print_tools(&[]);
+    }
 }

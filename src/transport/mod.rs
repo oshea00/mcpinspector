@@ -1,7 +1,7 @@
 use tokio::sync::mpsc;
 
-pub mod stdio;
 pub mod http;
+pub mod stdio;
 
 /// Result of establishing a transport: channels for sending/receiving raw lines
 pub struct TransportChannels {

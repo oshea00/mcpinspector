@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-use std::sync::Arc;
 use anyhow::Result;
 use colored::Colorize;
 use rustyline::completion::{Completer, Pair};
@@ -8,6 +6,8 @@ use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 use rustyline::{CompletionType, Config, Context, Editor, Helper};
+use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::commands::handle_command;
@@ -20,12 +20,30 @@ const RESOURCE_COMMANDS: &[&str] = &["read"];
 const PROMPT_COMMANDS: &[&str] = &["prompt"];
 
 const ALL_COMMANDS: &[&str] = &[
-    "connect", "connect-http", "disconnect", "reconnect", "status",
-    "tools", "call", "resources", "read", "prompts", "prompt",
-    "export", "set-name", "set-env", "set-timeout",
-    "cap-set", "cap-list", "cap-remove",
-    "log", "help", "history", "clear",
-    "quit", "exit",
+    "connect",
+    "connect-http",
+    "disconnect",
+    "reconnect",
+    "status",
+    "tools",
+    "call",
+    "resources",
+    "read",
+    "prompts",
+    "prompt",
+    "export",
+    "set-name",
+    "set-env",
+    "set-timeout",
+    "cap-set",
+    "cap-list",
+    "cap-remove",
+    "log",
+    "help",
+    "history",
+    "clear",
+    "quit",
+    "exit",
 ];
 
 pub struct McpHelper {
@@ -54,7 +72,8 @@ impl Completer for McpHelper {
         // If we're completing the first word (command)
         if words.is_empty() || (words.len() == 1 && !slice.ends_with(' ')) {
             let prefix = words.first().copied().unwrap_or("");
-            let candidates: Vec<Pair> = ALL_COMMANDS.iter()
+            let candidates: Vec<Pair> = ALL_COMMANDS
+                .iter()
                 .filter(|c| c.starts_with(prefix))
                 .map(|c| Pair {
                     display: c.to_string(),
@@ -66,7 +85,7 @@ impl Completer for McpHelper {
         }
 
         // Second word completions based on command
-        if words.len() >= 1 && (words.len() == 1 || (words.len() == 2 && !slice.ends_with(' '))) {
+        if !words.is_empty() && (words.len() == 1 || (words.len() == 2 && !slice.ends_with(' '))) {
             let cmd = words[0];
             let prefix = if words.len() == 2 { words[1] } else { "" };
 
@@ -76,9 +95,13 @@ impl Completer for McpHelper {
                     Ok(g) => g.clone(),
                     Err(_) => vec![],
                 };
-                let candidates: Vec<Pair> = tools.iter()
+                let candidates: Vec<Pair> = tools
+                    .iter()
                     .filter(|t| t.starts_with(prefix))
-                    .map(|t| Pair { display: t.clone(), replacement: t.clone() })
+                    .map(|t| Pair {
+                        display: t.clone(),
+                        replacement: t.clone(),
+                    })
                     .collect();
                 let start = pos - prefix.len();
                 return Ok((start, candidates));
@@ -89,9 +112,13 @@ impl Completer for McpHelper {
                     Ok(g) => g.clone(),
                     Err(_) => vec![],
                 };
-                let candidates: Vec<Pair> = resources.iter()
+                let candidates: Vec<Pair> = resources
+                    .iter()
                     .filter(|r| r.starts_with(prefix))
-                    .map(|r| Pair { display: r.clone(), replacement: r.clone() })
+                    .map(|r| Pair {
+                        display: r.clone(),
+                        replacement: r.clone(),
+                    })
                     .collect();
                 let start = pos - prefix.len();
                 return Ok((start, candidates));
@@ -102,9 +129,13 @@ impl Completer for McpHelper {
                     Ok(g) => g.clone(),
                     Err(_) => vec![],
                 };
-                let candidates: Vec<Pair> = prompts.iter()
+                let candidates: Vec<Pair> = prompts
+                    .iter()
                     .filter(|p| p.starts_with(prefix))
-                    .map(|p| Pair { display: p.clone(), replacement: p.clone() })
+                    .map(|p| Pair {
+                        display: p.clone(),
+                        replacement: p.clone(),
+                    })
                     .collect();
                 let start = pos - prefix.len();
                 return Ok((start, candidates));
@@ -130,7 +161,11 @@ pub async fn run_repl(state: &mut ReplState, live_notifications: bool) -> Result
     }
 
     println!("{}", "MCP Inspector (mcpi)".bold().cyan());
-    println!("Type {} for available commands, {} to exit.", "'help'".yellow(), "'quit'".yellow());
+    println!(
+        "Type {} for available commands, {} to exit.",
+        "'help'".yellow(),
+        "'quit'".yellow()
+    );
     println!();
 
     // Channel from rustyline thread → async event loop
@@ -165,8 +200,8 @@ pub async fn run_repl(state: &mut ReplState, live_notifications: bool) -> Result
                     }
                     // Wait for command to finish; false means exit requested
                     match done_rx.blocking_recv() {
-                        Ok(true) => {}    // continue — show next prompt
-                        _ => break,       // false or channel closed — exit
+                        Ok(true) => {} // continue — show next prompt
+                        _ => break,    // false or channel closed — exit
                     }
                 }
                 Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {

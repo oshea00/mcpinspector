@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use futures::StreamExt;
 use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -6,7 +7,6 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::codec::{FramedRead, LinesCodec};
-use futures::StreamExt;
 
 use crate::transport::TransportChannels;
 
@@ -30,7 +30,8 @@ impl StdioTransport {
             .stderr(Stdio::piped())
             .kill_on_drop(true);
 
-        let mut child = cmd.spawn()
+        let mut child = cmd
+            .spawn()
             .with_context(|| format!("Failed to spawn '{command}'"))?;
 
         let stdin = child.stdin.take().expect("stdin should be piped");
@@ -83,7 +84,10 @@ impl StdioTransport {
 
         Ok((
             StdioTransport { child, stderr_buf },
-            TransportChannels { tx: out_tx, rx: in_rx },
+            TransportChannels {
+                tx: out_tx,
+                rx: in_rx,
+            },
         ))
     }
 

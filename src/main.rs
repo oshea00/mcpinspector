@@ -1,14 +1,8 @@
-mod protocol;
-mod transport;
-mod config;
-mod display;
-mod commands;
-mod repl;
-
 use anyhow::Result;
 use clap::Parser;
 
-use config::{CompleterState, ReplState, DEFAULT_TIMEOUT_SECS};
+use mcpi::config::{CompleterState, ReplState, DEFAULT_TIMEOUT_SECS};
+use mcpi::{commands, display, repl};
 
 #[derive(Parser, Debug)]
 #[command(
