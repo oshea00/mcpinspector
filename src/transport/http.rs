@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::Result;
 use futures::StreamExt;
 use reqwest::Client;
@@ -8,9 +10,8 @@ use crate::transport::TransportChannels;
 pub struct HttpTransport;
 
 impl HttpTransport {
-    pub fn connect(url: String, bearer_token: Option<String>) -> Result<TransportChannels> {
+    pub fn connect(url: String, headers: HashMap<String, String>) -> Result<TransportChannels> {
         let client = Client::new();
-        let _url_clone = url.clone();
 
         // Outgoing: POST each JSON-RPC message to the endpoint
         let (out_tx, mut out_rx) = mpsc::channel::<String>(64);
@@ -29,8 +30,8 @@ impl HttpTransport {
                 };
 
                 let mut req = client_clone.post(&post_url).json(&body);
-                if let Some(token) = &bearer_token {
-                    req = req.header("Authorization", format!("Bearer {token}"));
+                for (key, value) in &headers {
+                    req = req.header(key.as_str(), value.as_str());
                 }
                 match req.send().await {
                     Ok(resp) => {

@@ -21,7 +21,7 @@ pub struct ConnectionConfig {
     pub args: Vec<String>,
     pub env: HashMap<String, String>,
     pub url: String,
-    pub bearer_token: Option<String>,
+    pub headers: HashMap<String, String>,
 }
 
 impl Default for ConnectionConfig {
@@ -32,7 +32,7 @@ impl Default for ConnectionConfig {
             args: Vec::new(),
             env: HashMap::new(),
             url: String::new(),
-            bearer_token: None,
+            headers: HashMap::new(),
         }
     }
 }
@@ -103,6 +103,9 @@ pub fn export_config(state: &ReplState) -> Value {
             let mut entry = json!({ "url": config.url });
             if !config.env.is_empty() {
                 entry["env"] = json!(config.env);
+            }
+            if !config.headers.is_empty() {
+                entry["headers"] = json!(config.headers);
             }
             entry
         }
@@ -186,6 +189,7 @@ mod tests {
         assert!(entry.get("url").is_some());
         assert!(entry.get("command").is_none());
         assert!(entry.get("env").is_none());
+        assert!(entry.get("headers").is_none());
     }
 
     #[test]
@@ -201,6 +205,21 @@ mod tests {
         let entry = &v["mcpServers"]["mcp-server"];
         assert!(entry.get("env").is_some());
         assert_eq!(entry["env"]["API_KEY"], "secret");
+    }
+
+    #[test]
+    fn export_config_http_with_headers() {
+        let mut state = make_state();
+        state.config.transport_type = TransportType::Http;
+        state.config.url = "http://localhost:3000".to_string();
+        state
+            .config
+            .headers
+            .insert("X-Custom".to_string(), "value".to_string());
+        let v = export_config(&state);
+        let entry = &v["mcpServers"]["mcp-server"];
+        assert!(entry.get("headers").is_some());
+        assert_eq!(entry["headers"]["X-Custom"], "value");
     }
 
     #[test]
@@ -220,7 +239,7 @@ mod tests {
         assert!(cfg.args.is_empty());
         assert!(cfg.env.is_empty());
         assert!(cfg.url.is_empty());
-        assert!(cfg.bearer_token.is_none());
+        assert!(cfg.headers.is_empty());
     }
 
     #[test]
