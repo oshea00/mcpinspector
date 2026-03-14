@@ -22,9 +22,21 @@ impl StdioTransport {
         env: &HashMap<String, String>,
         debug: bool,
     ) -> Result<(Self, TransportChannels)> {
-        let mut cmd = Command::new(command);
-        cmd.args(args)
-            .envs(env)
+        // On Windows, batch files (.cmd/.bat) like `npx` are not directly
+        // executable — they must be run via `cmd /c`.
+        #[cfg(windows)]
+        let mut cmd = {
+            let mut c = Command::new("cmd");
+            c.arg("/c").arg(command).args(args);
+            c
+        };
+        #[cfg(not(windows))]
+        let mut cmd = {
+            let mut c = Command::new(command);
+            c.args(args);
+            c
+        };
+        cmd.envs(env)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

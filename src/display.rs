@@ -223,7 +223,7 @@ pub fn print_resource_result(result: &Value) {
                 if let Some(text) = item.get("text").and_then(|v| v.as_str()) {
                     println!("{text}");
                 } else if let Some(blob) = item.get("blob") {
-                    println!("{}", format!("[binary data: {}]", blob).yellow());
+                    println!("{}", format!("[binary data: {blob}]").yellow());
                 }
             }
         }
@@ -294,7 +294,7 @@ pub fn print_prompt_messages(messages: &[crate::protocol::McpPromptMessage]) {
         let role = msg.role.bold();
         match &msg.content {
             crate::protocol::McpContent::Text { text } => {
-                println!("{}: {}", role, text);
+                println!("{role}: {text}");
             }
             crate::protocol::McpContent::Image { mime_type, .. } => {
                 println!("{}: {}", role, format!("[image/{mime_type}]").yellow());
