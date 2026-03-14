@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::protocol::{
     JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, JsonRpcServerRequest, McpPrompt,
-    McpPromptMessage, McpResource, McpTool, Notification, ServerCapabilities,
+    McpPromptMessage, McpResource, McpResourceTemplate, McpTool, Notification, ServerCapabilities,
 };
 
 pub struct McpClient {
@@ -251,6 +251,15 @@ impl McpClient {
         let result = self.send_request("resources/list", None).await?;
         let resources = result.get("resources").cloned().unwrap_or(json!([]));
         Ok(serde_json::from_value(resources)?)
+    }
+
+    pub async fn list_resource_templates(&self) -> Result<Vec<McpResourceTemplate>> {
+        let result = self.send_request("resources/templates/list", None).await?;
+        let templates = result
+            .get("resourceTemplates")
+            .cloned()
+            .unwrap_or(json!([]));
+        Ok(serde_json::from_value(templates)?)
     }
 
     pub async fn read_resource(&self, uri: &str) -> Result<Value> {

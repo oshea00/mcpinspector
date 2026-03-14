@@ -69,6 +69,18 @@ pub struct McpResource {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct McpResourceTemplate {
+    #[serde(rename = "uriTemplate")]
+    pub uri_template: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(rename = "mimeType", default)]
+    pub mime_type: String,
+    #[serde(default)]
+    pub description: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct McpPromptArgument {
     pub name: String,
     #[serde(default)]
@@ -169,6 +181,30 @@ impl Notification {
 }
 
 pub mod client;
+
+#[cfg(test)]
+mod template_tests {
+    use super::*;
+
+    #[test]
+    fn mcp_resource_template_deserialization() {
+        let json_str = r#"{"uriTemplate":"weather://{location}","name":"Weather","mimeType":"text/plain","description":"Weather data"}"#;
+        let t: McpResourceTemplate = serde_json::from_str(json_str).unwrap();
+        assert_eq!(t.uri_template, "weather://{location}");
+        assert_eq!(t.name, "Weather");
+        assert_eq!(t.mime_type, "text/plain");
+    }
+
+    #[test]
+    fn mcp_resource_template_defaults() {
+        let json_str = r#"{"uriTemplate":"foo://{id}"}"#;
+        let t: McpResourceTemplate = serde_json::from_str(json_str).unwrap();
+        assert_eq!(t.uri_template, "foo://{id}");
+        assert!(t.name.is_empty());
+        assert!(t.mime_type.is_empty());
+        assert!(t.description.is_empty());
+    }
+}
 
 #[cfg(test)]
 mod tests {

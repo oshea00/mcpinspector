@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 use crate::config::{write_config, ReplState, TransportType};
 use crate::display;
 use crate::protocol::client::McpClient;
-use crate::protocol::{McpPrompt, McpResource, McpTool, Notification};
+use crate::protocol::{McpPrompt, McpResource, McpResourceTemplate, McpTool, Notification};
 use crate::transport::{http::HttpTransport, stdio::StdioTransport};
 
 pub async fn handle_command(state: &mut ReplState, line: &str) -> Result<bool> {
@@ -93,8 +93,14 @@ async fn cmd_connect(state: &mut ReplState, args: &[String]) -> Result<()> {
             }
             {
                 let resources: Vec<McpResource> = client.list_resources().await.unwrap_or_default();
+                let templates: Vec<McpResourceTemplate> =
+                    client.list_resource_templates().await.unwrap_or_default();
                 let mut r = state.completer_state.resources.lock().await;
-                *r = resources.iter().map(|r| r.uri.clone()).collect();
+                *r = resources
+                    .iter()
+                    .map(|r| r.uri.clone())
+                    .chain(templates.iter().map(|t| t.uri_template.clone()))
+                    .collect();
             }
             {
                 let prompts: Vec<McpPrompt> = client.list_prompts().await.unwrap_or_default();
@@ -339,13 +345,23 @@ async fn cmd_resources(state: &mut ReplState) -> Result<()> {
         .as_ref()
         .ok_or_else(|| anyhow!("Not connected"))?;
     let resources = client.list_resources().await?;
+    let templates = client.list_resource_templates().await.unwrap_or_default();
 
     {
         let mut r = state.completer_state.resources.lock().await;
-        *r = resources.iter().map(|r| r.uri.clone()).collect();
+        *r = resources
+            .iter()
+            .map(|r| r.uri.clone())
+            .chain(templates.iter().map(|t| t.uri_template.clone()))
+            .collect();
     }
 
-    display::print_resources(&resources);
+    if resources.is_empty() && templates.is_empty() {
+        println!("{}", "No resources available.".yellow());
+    } else {
+        display::print_resources(&resources);
+        display::print_resource_templates(&templates);
+    }
     Ok(())
 }
 
@@ -525,6 +541,7 @@ fn cmd_history(state: &ReplState) {
 
 fn cmd_clear() {
     print!("\x1B[2J\x1B[H");
+    let _ = std::io::Write::flush(&mut std::io::stdout());
 }
 
 fn cmd_help(args: &[String]) {
@@ -562,7 +579,7 @@ fn print_full_help() {
     );
     println!();
     println!("{}", "Resources:".yellow().bold());
-    println!("  {:30} List all resources", "resources");
+    println!("  {:30} List resources and resource templates", "resources");
     println!("  {:30} Read resource content", "read <uri>");
     println!();
     println!("{}", "Prompts:".yellow().bold());
