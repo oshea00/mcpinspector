@@ -1,6 +1,6 @@
 mod helpers;
 
-use mcpi::protocol::{McpTool, Notification};
+use mcpi::protocol::{McpResourceTemplate, McpTool, Notification};
 use serde_json::json;
 use tokio::time::Duration;
 
@@ -255,6 +255,59 @@ async fn list_resources_parses_response() {
     assert_eq!(resources.len(), 1);
     assert_eq!(resources[0].uri, "file:///tmp/test.txt");
     assert_eq!(resources[0].mime_type, "text/plain");
+}
+
+#[tokio::test]
+async fn list_resource_templates_parses_response() {
+    let (client, mut server, _notif_rx) = helpers::make_client_with_mock();
+
+    tokio::spawn(async move {
+        respond_with(
+            &mut server,
+            json!({
+                "resourceTemplates": [{
+                    "uriTemplate": "weather://{location}",
+                    "name": "Weather",
+                    "mimeType": "text/plain",
+                    "description": "Weather data for a location"
+                }]
+            }),
+        )
+        .await;
+    });
+
+    let templates: Vec<McpResourceTemplate> = client.list_resource_templates().await.unwrap();
+    assert_eq!(templates.len(), 1);
+    assert_eq!(templates[0].uri_template, "weather://{location}");
+    assert_eq!(templates[0].name, "Weather");
+    assert_eq!(templates[0].mime_type, "text/plain");
+}
+
+#[tokio::test]
+async fn list_resource_templates_empty_response() {
+    let (client, mut server, _notif_rx) = helpers::make_client_with_mock();
+
+    tokio::spawn(async move {
+        respond_with(&mut server, json!({"resourceTemplates": []})).await;
+    });
+
+    let templates = client.list_resource_templates().await.unwrap();
+    assert!(templates.is_empty());
+}
+
+#[tokio::test]
+async fn list_resource_templates_sends_correct_method() {
+    let (client, mut server, _notif_rx) = helpers::make_client_with_mock();
+
+    let capture =
+        tokio::spawn(
+            async move { respond_with(&mut server, json!({"resourceTemplates": []})).await },
+        );
+
+    client.list_resource_templates().await.unwrap();
+
+    let request = capture.await.unwrap();
+    assert_eq!(request["method"], "resources/templates/list");
 }
 
 #[tokio::test]

@@ -1,5 +1,7 @@
 ## Development Workflow
 
+Update README.md to reflect changes in UX as a result of altered or added features.
+
 After making any code changes, always run the following commands and fix any
 issues before considering the work complete:
 ```bash

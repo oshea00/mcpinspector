@@ -1,8 +1,10 @@
 use colored::Colorize;
-use comfy_table::{Attribute, Cell, Color, Table};
+use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
 use serde_json::Value;
 
-use crate::protocol::{McpPrompt, McpResource, McpTool, Notification, ServerCapabilities};
+use crate::protocol::{
+    McpPrompt, McpResource, McpResourceTemplate, McpTool, Notification, ServerCapabilities,
+};
 
 pub fn print_tools(tools: &[McpTool]) {
     if tools.is_empty() {
@@ -10,6 +12,7 @@ pub fn print_tools(tools: &[McpTool]) {
         return;
     }
     let mut table = Table::new();
+    table.set_content_arrangement(ContentArrangement::Dynamic);
     table.set_header(vec![
         Cell::new("Name")
             .add_attribute(Attribute::Bold)
@@ -25,7 +28,7 @@ pub fn print_tools(tools: &[McpTool]) {
         let keys = extract_schema_keys(&tool.input_schema);
         table.add_row(vec![
             Cell::new(&tool.name).fg(Color::Green),
-            Cell::new(truncate(&tool.description, 60)),
+            Cell::new(&tool.description),
             Cell::new(keys),
         ]);
     }
@@ -38,6 +41,7 @@ pub fn print_resources(resources: &[McpResource]) {
         return;
     }
     let mut table = Table::new();
+    table.set_content_arrangement(ContentArrangement::Dynamic);
     table.set_header(vec![
         Cell::new("URI")
             .add_attribute(Attribute::Bold)
@@ -57,7 +61,39 @@ pub fn print_resources(resources: &[McpResource]) {
             Cell::new(&r.uri).fg(Color::Green),
             Cell::new(&r.name),
             Cell::new(&r.mime_type),
-            Cell::new(truncate(&r.description, 50)),
+            Cell::new(&r.description),
+        ]);
+    }
+    println!("{table}");
+}
+
+pub fn print_resource_templates(templates: &[McpResourceTemplate]) {
+    if templates.is_empty() {
+        return;
+    }
+    println!("{}", "Resource Templates:".bold());
+    let mut table = Table::new();
+    table.set_content_arrangement(ContentArrangement::Dynamic);
+    table.set_header(vec![
+        Cell::new("URI Template")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
+        Cell::new("Name")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
+        Cell::new("MIME Type")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
+        Cell::new("Description")
+            .add_attribute(Attribute::Bold)
+            .fg(Color::Cyan),
+    ]);
+    for t in templates {
+        table.add_row(vec![
+            Cell::new(&t.uri_template).fg(Color::Green),
+            Cell::new(&t.name),
+            Cell::new(&t.mime_type),
+            Cell::new(&t.description),
         ]);
     }
     println!("{table}");
@@ -69,6 +105,7 @@ pub fn print_prompts(prompts: &[McpPrompt]) {
         return;
     }
     let mut table = Table::new();
+    table.set_content_arrangement(ContentArrangement::Dynamic);
     table.set_header(vec![
         Cell::new("Name")
             .add_attribute(Attribute::Bold)
@@ -94,7 +131,7 @@ pub fn print_prompts(prompts: &[McpPrompt]) {
             .collect();
         table.add_row(vec![
             Cell::new(&p.name).fg(Color::Green),
-            Cell::new(truncate(&p.description, 60)),
+            Cell::new(&p.description),
             Cell::new(args.join(", ")),
         ]);
     }
@@ -278,14 +315,6 @@ pub(crate) fn extract_schema_keys(schema: &Value) -> String {
         .unwrap_or_default()
 }
 
-pub(crate) fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max {
-        s.to_string()
-    } else {
-        format!("{}…", &s[..max.saturating_sub(1)])
-    }
-}
-
 pub fn print_error(msg: &str) {
     eprintln!("{} {}", "Error:".red().bold(), msg);
 }
@@ -302,29 +331,6 @@ pub fn print_info(msg: &str) {
 mod tests {
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn truncate_short_string_unchanged() {
-        assert_eq!(truncate("hello", 10), "hello");
-    }
-
-    #[test]
-    fn truncate_exact_length_unchanged() {
-        assert_eq!(truncate("hello", 5), "hello");
-    }
-
-    #[test]
-    fn truncate_long_string_adds_ellipsis() {
-        let result = truncate("hello world", 6);
-        assert!(result.starts_with("hello"));
-        assert!(result.contains('…'));
-        assert!(result.chars().count() <= 6);
-    }
-
-    #[test]
-    fn truncate_empty_string() {
-        assert_eq!(truncate("", 5), "");
-    }
 
     #[test]
     fn extract_schema_keys_with_properties() {
@@ -351,5 +357,29 @@ mod tests {
     #[test]
     fn print_tools_empty_no_panic() {
         print_tools(&[]);
+    }
+
+    #[test]
+    fn print_resource_templates_empty_no_panic() {
+        print_resource_templates(&[]);
+    }
+
+    #[test]
+    fn print_resource_templates_with_entries_no_panic() {
+        let templates = vec![
+            McpResourceTemplate {
+                uri_template: "weather://{location}".to_string(),
+                name: "Weather".to_string(),
+                mime_type: "text/plain".to_string(),
+                description: "Weather data".to_string(),
+            },
+            McpResourceTemplate {
+                uri_template: "file://{path}".to_string(),
+                name: String::new(),
+                mime_type: String::new(),
+                description: String::new(),
+            },
+        ];
+        print_resource_templates(&templates);
     }
 }
