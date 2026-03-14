@@ -1,6 +1,6 @@
 [package]
 name = "mcpi"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 description = "A command-line tool REPL for inspecting MCP servers"
 license = "MIT"
