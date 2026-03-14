@@ -6,12 +6,42 @@ on:
       - 'v[0-9]+.[0-9]+.[0-9]+*'
 
 jobs:
-  release:
-    name: Publish to GitHub Release
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     outputs:
       rc: ${{ steps.check-tag.outputs.rc }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Tag
+        id: check-tag
+        shell: bash
+        run: |
+          ver=${GITHUB_REF##*/}
+          echo "version=$ver" >> $GITHUB_OUTPUT
+          if [[ "$ver" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "rc=false" >> $GITHUB_OUTPUT
+          else
+            echo "rc=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: ${{ steps.check-tag.outputs.rc == 'true' }}
+          generate_release_notes: true
+
+  release:
+    name: Publish to GitHub Release
+    needs: create-release
+    permissions:
+      contents: write
+    outputs:
+      rc: ${{ needs.create-release.outputs.rc }}
 
     strategy:
       matrix:
@@ -58,11 +88,6 @@ jobs:
         run: |
           ver=${GITHUB_REF##*/}
           echo "version=$ver" >> $GITHUB_OUTPUT
-          if [[ "$ver" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "rc=false" >> $GITHUB_OUTPUT
-          else
-            echo "rc=true" >> $GITHUB_OUTPUT
-          fi
 
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -119,10 +144,7 @@ jobs:
       - name: Publish Archive
         uses: softprops/action-gh-release@v2
         with:
-          draft: false
           files: ${{ steps.package.outputs.archive }}
-          prerelease: ${{ steps.check-tag.outputs.rc == 'true' }}
-          generate_release_notes: true
 
   publish-crate:
     name: Publish to crates.io
