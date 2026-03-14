@@ -5,7 +5,7 @@ An interactive command-line tool for connecting to and inspecting [Model Context
 ## Features
 
 - Connect to MCP servers via **stdio** (subprocess) or **HTTP/SSE** transports
-- Supports Authorization header Bearer tokens via --bearer parameter
+- Supports arbitrary HTTP request headers via `-H`; `--bearer` is shorthand for `Authorization: Bearer`
 - Inspect and invoke **tools**, **resources**, and **prompts**
 - View server **notifications** in real time or buffered
 - **Tab completion** for commands, tool names, resource URIs, and prompt names
@@ -48,7 +48,8 @@ mcpi [OPTIONS]
 |------|-------------|
 | `--connect <CMD>` | Connect to a stdio MCP server on startup |
 | `--connect-http <URL>` | Connect to an HTTP MCP server on startup |
-| `--bearer <TOKEN>` | Bearer token for HTTP `Authorization` header |
+| `--bearer <TOKEN>` | Shorthand for `-H "Authorization: Bearer <TOKEN>"` |
+| `-H <Name: Value>` | Add an HTTP request header (repeatable) |
 | `--live` | Print server notifications immediately instead of buffering them |
 | `--timeout <SECS>` | Request timeout in seconds (default: 10) |
 | `-e <KEY=VALUE>` | Pass an environment variable to the server process (repeatable) |
@@ -70,6 +71,9 @@ mcpi --connect-http http://localhost:3000/mcp
 
 # Auto-connect to an HTTP server with a Bearer token
 mcpi --connect-http http://localhost:3000/mcp --bearer $JWTTOKEN
+
+# Auto-connect with arbitrary HTTP headers
+mcpi --connect-http http://localhost:3000/mcp -H "X-MCP-Insiders: true" -H "X-Tenant: acme"
 
 # Print server notifications live as they arrive
 mcpi --live --connect "npx -y @modelcontextprotocol/server-filesystem /tmp"

@@ -32,6 +32,10 @@ struct Cli {
     #[arg(short = 'e', value_name = "KEY=VALUE", action = clap::ArgAction::Append)]
     env: Vec<String>,
 
+    /// HTTP header to send with requests (\"Name: Value\", repeatable)
+    #[arg(short = 'H', value_name = "Name: Value", action = clap::ArgAction::Append)]
+    header: Vec<String>,
+
     /// Bearer token for HTTP Authorization header (use $VARNAME to pass from env)
     #[arg(long, value_name = "TOKEN")]
     bearer: Option<String>,
@@ -49,7 +53,6 @@ async fn main() -> Result<()> {
     let mut state = ReplState::new(completer_state);
     state.timeout_secs = cli.timeout;
     state.debug = cli.debug;
-    state.config.bearer_token = cli.bearer;
 
     // Populate env vars from -e KEY=VALUE flags
     for kv in &cli.env {
@@ -58,6 +61,26 @@ async fn main() -> Result<()> {
         } else {
             eprintln!("Warning: ignoring malformed -e value (expected KEY=VALUE): {kv}");
         }
+    }
+
+    // Populate HTTP headers from -H "Name: Value" flags
+    for h in &cli.header {
+        if let Some((k, v)) = h.split_once(':') {
+            state
+                .config
+                .headers
+                .insert(k.trim().to_string(), v.trim().to_string());
+        } else {
+            eprintln!("Warning: ignoring malformed -H value (expected \"Name: Value\"): {h}");
+        }
+    }
+
+    // --bearer is shorthand for -H "Authorization: Bearer <token>"
+    if let Some(token) = cli.bearer {
+        state
+            .config
+            .headers
+            .insert("Authorization".to_string(), format!("Bearer {token}"));
     }
 
     // Auto-connect if flags provided
