@@ -149,6 +149,7 @@ async fn cmd_connect_http(state: &mut ReplState, args: &[String]) -> Result<()> 
     display::print_info(&format!("Connecting to '{url}'..."));
 
     let channels = HttpTransport::connect(url.clone(), state.config.headers.clone())?;
+    let session_id_ref = channels.session_id.clone();
     let (notif_tx, notif_rx) = mpsc::channel::<Notification>(256);
     let client = McpClient::new(
         channels.tx,
@@ -167,6 +168,11 @@ async fn cmd_connect_http(state: &mut ReplState, args: &[String]) -> Result<()> 
             state.notification_rx = Some(notif_rx);
 
             display::print_success("Connected!");
+            if let Some(sid_arc) = session_id_ref {
+                if let Some(sid) = sid_arc.lock().unwrap().as_deref() {
+                    display::print_info(&format!("Session ID: {sid}"));
+                }
+            }
             display::print_capabilities(&caps);
             state.capabilities = Some(caps);
         }

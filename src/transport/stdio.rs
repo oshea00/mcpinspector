@@ -99,6 +99,7 @@ impl StdioTransport {
             TransportChannels {
                 tx: out_tx,
                 rx: in_rx,
+                session_id: None,
             },
         ))
     }
