@@ -305,11 +305,26 @@ pub fn print_prompt_messages(messages: &[crate::protocol::McpPromptMessage]) {
 }
 
 pub(crate) fn extract_schema_keys(schema: &Value) -> String {
+    let required_keys: std::collections::HashSet<&str> = schema
+        .get("required")
+        .and_then(|r| r.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+
     schema
         .get("properties")
         .and_then(|p| p.as_object())
         .map(|obj| {
-            let keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
+            let keys: Vec<String> = obj
+                .keys()
+                .map(|key| {
+                    if required_keys.contains(key.as_str()) {
+                        format!("{}*", key)
+                    } else {
+                        key.clone()
+                    }
+                })
+                .collect();
             keys.join(", ")
         })
         .unwrap_or_default()
@@ -340,6 +355,29 @@ mod tests {
         assert!(keys.contains('a'));
         assert!(keys.contains('b'));
         assert!(keys.contains(", "));
+    }
+
+    #[test]
+    fn extract_schema_keys_with_required() {
+        let schema = json!({
+            "properties": {"a": {}, "b": {}, "c": {}},
+            "required": ["a", "b"]
+        });
+        let keys = extract_schema_keys(&schema);
+        assert!(keys.contains("a*"));
+        assert!(keys.contains("b*"));
+        assert!(keys.contains('c'));
+        assert!(!keys.contains("c*"));
+    }
+
+    #[test]
+    fn extract_schema_keys_all_required() {
+        let schema = json!({
+            "properties": {"x": {}, "y": {}},
+            "required": ["x", "y"]
+        });
+        let keys = extract_schema_keys(&schema);
+        assert_eq!(keys, "x*, y*");
     }
 
     #[test]

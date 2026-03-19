@@ -131,7 +131,7 @@ mcpi> status
 ### Tools
 
 #### `tools`
-List all tools the server exposes, showing name, description, and input parameter keys.
+List all tools the server exposes, showing name, description, and input parameter keys. Required keys are marked with `*`.
 
 ```
 mcpi> tools
