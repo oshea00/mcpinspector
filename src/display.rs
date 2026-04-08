@@ -180,7 +180,7 @@ pub fn print_capabilities(caps: &ServerCapabilities) {
             "no".red().to_string()
         }),
     ]);
-    println!("{table}");
+    eprintln!("{table}");
 }
 
 pub fn print_tool_result(result: &Value) {
@@ -335,11 +335,11 @@ pub fn print_error(msg: &str) {
 }
 
 pub fn print_success(msg: &str) {
-    println!("{} {}", "✓".green().bold(), msg);
+    eprintln!("{} {}", "✓".green().bold(), msg);
 }
 
 pub fn print_info(msg: &str) {
-    println!("{} {}", "ℹ".blue(), msg);
+    eprintln!("{} {}", "ℹ".blue(), msg);
 }
 
 #[cfg(test)]

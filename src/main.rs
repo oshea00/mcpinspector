@@ -1,7 +1,10 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::Parser;
 
-use mcpi::config::{CompleterState, ReplState, DEFAULT_TIMEOUT_SECS};
+use mcpi::config::{
+    apply_server_entry, load_mcp_servers, CompleterState, ReplState, TransportType,
+    DEFAULT_TIMEOUT_SECS,
+};
 use mcpi::{commands, display, repl};
 
 #[derive(Parser, Debug)]
@@ -19,6 +22,22 @@ struct Cli {
     /// Connect to an HTTP MCP server on startup
     #[arg(long, value_name = "URL")]
     connect_http: Option<String>,
+
+    /// Load MCP server definitions from a JSON config file (mcpServers format)
+    #[arg(long, value_name = "FILE")]
+    mcp_config: Option<String>,
+
+    /// Select a server from --mcp-config by key and auto-connect
+    #[arg(long, value_name = "KEY")]
+    server: Option<String>,
+
+    /// Call a tool and exit (batch/scripting mode — requires a connection)
+    #[arg(long, value_name = "TOOL")]
+    tool: Option<String>,
+
+    /// JSON arguments for --tool
+    #[arg(long, value_name = "JSON")]
+    args: Option<String>,
 
     /// Print server notifications live (instead of buffering)
     #[arg(long)]
@@ -83,7 +102,24 @@ async fn main() -> Result<()> {
             .insert("Authorization".to_string(), format!("Bearer {token}"));
     }
 
-    // Auto-connect if flags provided
+    // Load mcp.json and apply server entry if specified
+    if let Some(config_path) = &cli.mcp_config {
+        if let Some(key) = &cli.server {
+            let servers = load_mcp_servers(config_path)?;
+            let entry = servers
+                .get(key)
+                .ok_or_else(|| anyhow!("Server '{}' not found in '{}'", key, config_path))?;
+            apply_server_entry(&mut state, key, &entry.clone())?;
+        } else if cli.tool.is_some() {
+            return Err(anyhow!(
+                "--server is required when using --tool with --mcp-config"
+            ));
+        }
+    } else if cli.server.is_some() {
+        return Err(anyhow!("--server requires --mcp-config"));
+    }
+
+    // Auto-connect: explicit flags take priority, then preloaded config from --server
     if let Some(cmd_str) = &cli.connect {
         let parts = shell_words::split(cmd_str)
             .unwrap_or_else(|_| cmd_str.split_whitespace().map(String::from).collect());
@@ -91,13 +127,53 @@ async fn main() -> Result<()> {
             let line = format!("connect {cmd_str}");
             if let Err(e) = commands::handle_command(&mut state, &line).await {
                 display::print_error(&e.to_string());
+                if cli.tool.is_some() {
+                    return Err(e);
+                }
             }
         }
     } else if let Some(url) = &cli.connect_http {
         let line = format!("connect-http {url}");
         if let Err(e) = commands::handle_command(&mut state, &line).await {
             display::print_error(&e.to_string());
+            if cli.tool.is_some() {
+                return Err(e);
+            }
         }
+    } else if cli.server.is_some() {
+        // Auto-connect using the preloaded server config
+        match state.config.transport_type {
+            TransportType::Http => {
+                let line = format!("connect-http {}", state.config.url);
+                commands::handle_command(&mut state, &line).await?;
+            }
+            TransportType::Stdio => {
+                let quoted = shell_words::join(
+                    std::iter::once(state.config.command.as_str())
+                        .chain(state.config.args.iter().map(|s| s.as_str())),
+                );
+                let line = format!("connect {quoted}");
+                commands::handle_command(&mut state, &line).await?;
+            }
+        }
+    }
+
+    // Batch tool call: invoke tool and exit without entering the REPL
+    if let Some(tool_name) = cli.tool {
+        let json_args = cli
+            .args
+            .as_deref()
+            .map(serde_json::from_str::<serde_json::Value>)
+            .transpose()
+            .map_err(|e| anyhow!("Invalid JSON in --args: {e}"))?;
+
+        let client = state.client.as_ref().ok_or_else(|| {
+            anyhow!("Not connected — use --connect, --connect-http, or --mcp-config with --server")
+        })?;
+
+        let result = client.call_tool(&tool_name, json_args).await?;
+        display::print_tool_result(&result);
+        return Ok(());
     }
 
     repl::run_repl(&mut state, cli.live).await?;

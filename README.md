@@ -48,6 +48,10 @@ mcpi [OPTIONS]
 |------|-------------|
 | `--connect <CMD>` | Connect to a stdio MCP server on startup |
 | `--connect-http <URL>` | Connect to an HTTP MCP server on startup |
+| `--mcp-config <FILE>` | Load server definitions from a JSON config file (`mcpServers` format) |
+| `--server <KEY>` | Select and auto-connect to a server from `--mcp-config` by key |
+| `--tool <TOOL>` | Call a tool and exit (batch/scripting mode — requires a connection) |
+| `--args <JSON>` | JSON arguments object for `--tool` |
 | `--bearer <TOKEN>` | Shorthand for `-H "Authorization: Bearer <TOKEN>"` |
 | `-H <Name: Value>` | Add an HTTP request header (repeatable) |
 | `--live` | Print server notifications immediately instead of buffering them |
@@ -86,6 +90,62 @@ mcpi -e API_KEY=sk-abc123 -e REGION=us-east-1 --connect "my-mcp-server --mcp"
 
 # Show raw JSON-RPC wire traffic and live server stderr
 mcpi --debug --connect "my-mcp-server --mcp"
+```
+
+---
+
+## Batch / Scripting Mode
+
+Use `--mcp-config`, `--server`, `--tool`, and `--args` to call a single tool and exit — no REPL required. This is useful for scripts, CI pipelines, and Claude Code skill definitions.
+
+### `--mcp-config <FILE>`
+
+Load server definitions from a JSON file in Claude Desktop `mcpServers` format:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    },
+    "myapi": {
+      "url": "http://localhost:3000/mcp",
+      "headers": { "Authorization": "Bearer $TOKEN" }
+    }
+  }
+}
+```
+
+### `--server <KEY>`
+
+Select one of the servers by key and auto-connect to it. Requires `--mcp-config`.
+
+### `--tool <TOOL>` and `--args <JSON>`
+
+Call a tool and write its output to stdout, then exit. The tool result text goes to stdout; connection status messages go to stderr so they don't pollute captured output.
+
+```bash
+# Call a tool using a server from mcp.json
+mcpi --mcp-config ~/.config/mcpservers.json \
+     --server filesystem \
+     --tool list_directory \
+     --args '{"path": "/tmp"}'
+
+# Call a tool via explicit connection
+mcpi --connect "npx -y @modelcontextprotocol/server-filesystem /tmp" \
+     --tool read_file \
+     --args '{"path": "/tmp/notes.txt"}'
+
+# Call a no-argument tool
+mcpi --mcp-config mcp.json --server myapi --tool get_status
+```
+
+This makes it easy to use mcpi as a backend for Claude Code skills:
+
+```markdown
+Use `mcpi` to call the tool:
+mcpi --mcp-config ~/.config/mcpservers.json --server myserver --tool my_tool --args '{"param":"value"}'
 ```
 
 ---
