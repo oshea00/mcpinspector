@@ -14,6 +14,7 @@ An interactive command-line tool for connecting to and inspecting [Model Context
 - **Configurable request timeout** via CLI flag or REPL command
 - **Fast failure** on bad connections — shows server stderr and exits immediately when the process dies
 - **Debug mode** (`--debug`) — prints raw JSON-RPC wire traffic and live server stderr to your terminal
+- **Batch / scripting mode** — call a single tool and exit non-interactively via `--tool` and `--args`; load server definitions from a config file with `--mcp-config` and `--server` for use in scripts and CI pipelines
 
 ## Installation
 
